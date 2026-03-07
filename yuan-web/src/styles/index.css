@@ -1,0 +1,83 @@
+:root {
+  --bg-canvas: radial-gradient(circle at 10% 20%, #ffe8cc 0%, #f8f9fa 32%, #eef7fa 60%, #dceaf1 100%);
+  --bg-card: rgba(255, 255, 255, 0.78);
+  --border-card: rgba(11, 114, 133, 0.18);
+  --text-main: #1d3557;
+  --text-sub: #4f5d75;
+  --shadow-soft: 0 18px 40px rgba(39, 72, 98, 0.12);
+  --accent-warn: #e8590c;
+  --accent-good: #2b8a3e;
+  --accent-bad: #c92a2a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: Poppins, Segoe UI, Noto Sans SC, sans-serif;
+  color: var(--text-main);
+  background: var(--bg-canvas);
+  background-attachment: fixed;
+}
+
+.glass-card {
+  border: 1px solid var(--border-card);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(8px);
+}
+
+.page-shell {
+  padding: 20px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: 0.01em;
+}
+
+.page-subtitle {
+  margin: 8px 0 0;
+  color: var(--text-sub);
+}
+
+.metric-value {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.metric-label {
+  color: var(--text-sub);
+  font-size: 13px;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .page-shell {
+    padding: 12px;
+  }
+
+  .responsive-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}

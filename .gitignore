@@ -1,0 +1,38 @@
+# IDE / Editor
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Java / Maven build outputs
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Frontend (Vite / TypeScript)
+yuan-web/node_modules/
+yuan-web/dist/
+yuan-web/.vite/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Caches / temp files
+.cache/
+tmp/
+temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
