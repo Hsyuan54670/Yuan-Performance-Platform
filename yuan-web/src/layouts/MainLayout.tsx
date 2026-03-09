@@ -4,6 +4,7 @@ import type { MenuProps } from "antd";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { logoutApi } from "../api/auth";
 import { useAuth } from "../hooks/useAuth";
 import { appMenus, type MenuItem } from "../router";
 import { useAppStore } from "../store/appStore";
@@ -68,6 +69,15 @@ function MainLayout() {
     if (!chain.length) return [{ title: t("layout.breadcrumbFallback") }];
     return chain.map((item) => ({ title: t(item.labelKey) }));
   }, [location.pathname, t]);
+
+  const handleLogout = async () => {
+    try {
+      await logoutApi();
+    } finally {
+      logout();
+      navigate("/login", { replace: true });
+    }
+  };
 
   return (
     <Layout style={{ minHeight: "100vh", background: "transparent" }}>
@@ -161,7 +171,7 @@ function MainLayout() {
             <Space>
               <Avatar style={{ backgroundColor: "#0b7285" }}>{(user?.nickname || "U").slice(0, 1)}</Avatar>
               <Typography.Text strong>{user?.nickname || t("layout.userDefault")}</Typography.Text>
-              <Button type="link" onClick={logout}>
+              <Button type="link" onClick={() => void handleLogout()}>
                 {t("layout.logout")}
               </Button>
             </Space>

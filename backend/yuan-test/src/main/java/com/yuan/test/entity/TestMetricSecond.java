@@ -10,42 +10,30 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("test_task")
-public class TestTask {
+@TableName("test_metric_second")
+public class TestMetricSecond {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("user_id")
-    private Long userId;
+    @TableField("task_id")
+    private Long taskId;
 
-    @TableField("plan_id")
-    private Long planId;
-
-    @TableField("scene_id")
-    private Long sceneId;
-
-    @TableField("status")
-    private String status;
-
-    @TableField("start_time")
-    private LocalDateTime startTime;
-
-    @TableField("end_time")
-    private LocalDateTime endTime;
-
-    @TableField("duration")
-    private Integer duration;
+    @TableField("ts")
+    private LocalDateTime ts;
 
     @TableField("qps")
     private BigDecimal qps;
+
+    @TableField("p50")
+    private BigDecimal p50;
+
+    @TableField("p90")
+    private BigDecimal p90;
 
     @TableField("p99")
     private BigDecimal p99;
 
     @TableField("error_rate")
     private BigDecimal errorRate;
-
-    @TableField("created_at")
-    private LocalDateTime createdAt;
 }

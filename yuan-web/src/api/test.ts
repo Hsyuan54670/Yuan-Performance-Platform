@@ -1,8 +1,11 @@
-import { testPlans, testScenes, testTasks } from "../mock/data";
 import type { RealtimeMetricPoint, TestPlan, TestScene, TestTask } from "../types/test";
-import { withMockDelay } from "../utils/request";
+import { request, type ApiResponse, withMockDelay } from "../utils/request";
+import { testPlans, testScenes, testTasks } from "../mock/data";
 
-export const listPlansApi = async (): Promise<TestPlan[]> => withMockDelay(testPlans);
+export const listPlansApi = async (): Promise<TestPlan[]> => {
+  const { data } = await request.get<ApiResponse<TestPlan[]>>("/test/plans");
+  return data.data;
+};
 
 export const listScenesApi = async (): Promise<TestScene[]> => withMockDelay(testScenes);
 

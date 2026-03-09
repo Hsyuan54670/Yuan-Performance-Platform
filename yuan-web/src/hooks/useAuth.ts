@@ -2,15 +2,17 @@ import { useMemo } from "react";
 import { useUserStore } from "../store/userStore";
 
 export const useAuth = () => {
-  const { loggedIn, user, login, logout } = useUserStore();
+  const { loggedIn, user, refreshToken, login, logout, setUser } = useUserStore();
 
   return useMemo(
     () => ({
       loggedIn,
       user,
+      refreshToken,
       login,
-      logout
+      logout,
+      setUser
     }),
-    [loggedIn, user, login, logout]
+    [loggedIn, user, refreshToken, login, logout, setUser]
   );
 };

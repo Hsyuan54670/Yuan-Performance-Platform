@@ -1,10 +1,9 @@
 package com.yuan.test.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.yuan.test.entity.TestPlan;
-import com.yuan.test.entity.TestTask;
+import com.yuan.test.entity.TestSceneStep;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface TestTaskMapper extends BaseMapper<TestTask> {
+public interface TestSceneStepMapper extends BaseMapper<TestSceneStep> {
 }

@@ -1,0 +1,26 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: yuan-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 172.23.80.90:8848
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: auth-service
+              uri: lb://yuan-auth
+              predicates:
+                - Path=/auth/**
+            - id: test-service
+              uri: lb://yuan-test
+              predicates:
+                - Path=/test/**
+  data:
+    redis:
+      host: 172.23.80.90
+      port: 6379
+      password: Lqy147258369

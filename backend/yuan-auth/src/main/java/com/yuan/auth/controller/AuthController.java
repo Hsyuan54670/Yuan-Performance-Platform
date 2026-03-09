@@ -13,9 +13,8 @@ import org.springframework.web.bind.annotation.*;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/auth")
 public class AuthController {
-
 
     private final AuthService authService;
 
@@ -23,17 +22,12 @@ public class AuthController {
         this.authService = authService;
     }
 
-    /*
-    * 登录接口
-    * */
     @PostMapping("/login")
     public R<LoginResponseVO> login(@Valid @RequestBody LoginRequestDTO request) {
         log.info("Login request received, username={}", request.getUsername());
         return authService.login(request);
     }
-    /*
-    *
-    * */
+
     @GetMapping("/me")
     public R<UserInfoVO> me(@RequestHeader("Authorization") String authorization) {
         return authService.me(authorization);
@@ -45,8 +39,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public R<Void> logout(@RequestHeader("Authorization") String authorization,@Valid @RequestBody LogoutRequestDTO request) {
-        return authService.logout(authorization,request);
+    public R<Void> logout(@RequestHeader("Authorization") String authorization, @Valid @RequestBody LogoutRequestDTO request) {
+        return authService.logout(authorization, request);
     }
-
 }

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { loginApi } from "../../api/auth";
 import { useAuth } from "../../hooks/useAuth";
 import type { LoginRequest } from "../../types/auth";
+import { getRequestErrorMessage } from "../../utils/request";
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -12,10 +13,14 @@ function LoginPage() {
   const { t } = useTranslation();
 
   const onFinish = async (values: LoginRequest) => {
-    const result = await loginApi(values);
-    login(result.token, result.user);
-    message.success(t("login.success"));
-    navigate("/dashboard");
+    try {
+      const result = await loginApi(values);
+      login(result.token, result.refreshToken, result.user);
+      message.success(t("login.success"));
+      navigate("/dashboard");
+    } catch (error) {
+      message.error(getRequestErrorMessage(error, t("login.error")));
+    }
   };
 
   return (
@@ -40,7 +45,7 @@ function LoginPage() {
           {t("login.subtitle")}
         </Typography.Paragraph>
 
-        <Form<LoginRequest> layout="vertical" onFinish={onFinish} initialValues={{ username: "admin", password: "123456" }}>
+        <Form<LoginRequest> layout="vertical" onFinish={onFinish} initialValues={{ username: "admin", password: "admin123" }}>
           <Form.Item name="username" label={t("login.username")} rules={[{ required: true }]}>
             <Input size="large" prefix={<UserOutlined />} placeholder="admin" />
           </Form.Item>
