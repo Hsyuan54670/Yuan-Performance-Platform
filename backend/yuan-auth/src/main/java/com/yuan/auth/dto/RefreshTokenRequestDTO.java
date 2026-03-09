@@ -4,9 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-public class LoginRequestDTO {
+public class RefreshTokenRequestDTO {
     @NotBlank
-    private String username;
-    @NotBlank
-    private String password;
+    private  String refreshToken;
 }
