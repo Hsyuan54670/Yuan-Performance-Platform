@@ -17,4 +17,14 @@ public class CommonConstant {
     public static final String REDIS_BLACKLIST_TOKEN = "yuan:auth:blacklist:token:";
     public static final String REDIS_BLACKLIST_REFRESH_TOKEN = "yuan:auth:blacklist:refresh_token:";
 
+    // JMeter相关常量
+    //1. JMeter脚本存放目录
+    public static final String JMETER_SCRIPTS_DIR = "E:/AI/workspace/projects/yuan/jmeter/scripts/";
+    //2. JMeter结果文件存放目录
+    public static final String JMETER_RESULTS_DIR = "E:/AI/workspace/projects/yuan/jmeter/results/";
+
+    // 其它常量
+    //1.进程等待时间
+    public static final long WAIT_TIME = 3;
+
 }

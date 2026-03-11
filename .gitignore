@@ -36,3 +36,6 @@ temp/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+jmeter/scripts/*
+jmeter/results/*

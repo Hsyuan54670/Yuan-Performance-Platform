@@ -1,33 +1,38 @@
 import { useEffect, useState } from "react";
-import { randomInRange } from "../utils/format";
+import { metricsHistoryApi } from "../api/test";
 import type { RealtimeMetricPoint } from "../types/test";
-
-const nowLabel = (): string => new Date().toLocaleTimeString("zh-CN", { hour12: false });
 
 export const useWebSocket = (taskId: number) => {
   const [connected, setConnected] = useState(false);
   const [series, setSeries] = useState<RealtimeMetricPoint[]>([]);
 
   useEffect(() => {
-    setConnected(true);
-    setSeries([]);
+    let disposed = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
 
-    const timer = setInterval(() => {
-      setSeries((prev) => {
-        const next: RealtimeMetricPoint = {
-          time: nowLabel(),
-          qps: randomInRange(980, 1460),
-          p50: randomInRange(80, 220),
-          p90: randomInRange(260, 700),
-          p99: randomInRange(800, 1800),
-          errorRate: randomInRange(0.1, 5.8)
-        };
-        return [...prev.slice(-39), next];
-      });
-    }, 1000);
+    const loadMetrics = async () => {
+      try {
+        const resp = await metricsHistoryApi(taskId);
+        if (disposed) return;
+        setSeries(resp);
+        setConnected(true);
+      } catch {
+        if (disposed) return;
+        setConnected(false);
+        setSeries([]);
+      }
+    };
+
+    setConnected(false);
+    setSeries([]);
+    loadMetrics();
+    timer = setInterval(loadMetrics, 3000);
 
     return () => {
-      clearInterval(timer);
+      disposed = true;
+      if (timer) {
+        clearInterval(timer);
+      }
       setConnected(false);
     };
   }, [taskId]);

@@ -26,11 +26,19 @@ function TestTaskPage() {
   const { connected, series } = useWebSocket(activeTaskId);
   const { t } = useTranslation();
 
+  const loadTasks = async () => {
+    const resp = await listTasksApi();
+    setTasks(resp);
+    if (!resp.length) {
+      return;
+    }
+    if (!resp.some((item) => item.id === activeTaskId)) {
+      setActiveTaskId(resp[0].id);
+    }
+  };
+
   useEffect(() => {
-    listTasksApi().then((resp) => {
-      setTasks(resp);
-      if (!activeTaskId && resp[0]) setActiveTaskId(resp[0].id);
-    });
+    loadTasks();
     getSystemMetricsApi().then(setSysMetric);
   }, [activeTaskId, setActiveTaskId]);
 
@@ -73,7 +81,13 @@ function TestTaskPage() {
                   type="primary"
                   icon={<PlayCircleOutlined />}
                   onClick={async () => {
-                    await startTaskApi();
+                    const taskId = activeTaskId || tasks[0]?.id;
+                    if (!taskId) {
+                      message.warning(t("testTask.selectTaskFirst"));
+                      return;
+                    }
+                    await startTaskApi(taskId);
+                    await loadTasks();
                     message.success(t("testTask.startSuccess"));
                   }}
                 >
@@ -83,7 +97,13 @@ function TestTaskPage() {
                   danger
                   icon={<PauseCircleOutlined />}
                   onClick={async () => {
-                    await stopTaskApi();
+                    const taskId = activeTaskId || tasks[0]?.id;
+                    if (!taskId) {
+                      message.warning(t("testTask.selectTaskFirst"));
+                      return;
+                    }
+                    await stopTaskApi(taskId);
+                    await loadTasks();
                     message.info(t("testTask.stopSuccess"));
                   }}
                 >
@@ -190,4 +210,3 @@ function TestTaskPage() {
 }
 
 export default TestTaskPage;
-

@@ -67,7 +67,10 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     }
 
     private boolean isWhitelistedPath(String path) {
-        return "/auth/login".equals(path) || "/auth/refresh".equals(path);
+        return "/auth/login".equals(path)
+                || "/auth/refresh".equals(path)
+                || "/test/mock/ping".equals(path)
+                || "/test/mock/order".equals(path);
     }
 
     public Map<String,Object> isValidToken(String token) {

@@ -22,8 +22,14 @@ public class TestTask {
     @TableField("plan_id")
     private Long planId;
 
+    @TableField(exist = false)
+    private String planName;
+
     @TableField("scene_id")
     private Long sceneId;
+
+    @TableField(exist = false)
+    private  String sceneName;
 
     @TableField("status")
     private String status;

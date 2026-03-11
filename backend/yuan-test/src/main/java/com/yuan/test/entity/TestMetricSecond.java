@@ -4,12 +4,14 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
+@AllArgsConstructor
 @TableName("test_metric_second")
 public class TestMetricSecond {
 
@@ -18,6 +20,9 @@ public class TestMetricSecond {
 
     @TableField("task_id")
     private Long taskId;
+
+    @TableField("run_id")
+    private Long runId;
 
     @TableField("ts")
     private LocalDateTime ts;
@@ -36,4 +41,5 @@ public class TestMetricSecond {
 
     @TableField("error_rate")
     private BigDecimal errorRate;
+
 }

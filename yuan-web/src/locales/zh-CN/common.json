@@ -105,6 +105,7 @@
     "stopTask": "停止任务",
     "startSuccess": "任务已启动",
     "stopSuccess": "任务已停止",
+    "selectTaskFirst": "请先选择任务",
     "taskList": "任务列表",
     "colTask": "任务",
     "colPlan": "计划",
@@ -264,3 +265,5 @@
     }
   }
 }
+
+

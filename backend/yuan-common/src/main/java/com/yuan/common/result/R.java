@@ -25,6 +25,10 @@ public class R<T> {
         return new R<>(HttpStatus.SUCCESS, "success", data);
     }
 
+    public static <T> R<T> success() {
+        return new R<>(HttpStatus.SUCCESS, "success", null);
+    }
+
     public static <T> R<T> fail(int code, String message) {
         return new R<>(code, message, null);
     }

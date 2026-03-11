@@ -105,6 +105,7 @@
     "stopTask": "Stop Task",
     "startSuccess": "Task started",
     "stopSuccess": "Task stopped",
+    "selectTaskFirst": "Select a task first",
     "taskList": "Task List",
     "colTask": "Task",
     "colPlan": "Plan",
@@ -264,3 +265,5 @@
     }
   }
 }
+
+
