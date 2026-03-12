@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yuan.monitor.mapper.AlertRuleMapper">
+
+    <resultMap id="AlertRuleResultMap" type="com.yuan.monitor.entity.AlertRule">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="name" column="name"/>
+        <result property="metric" column="metric"/>
+        <result property="op" column="op"/>
+        <result property="threshold" column="threshold"/>
+        <result property="level" column="level"/>
+        <result property="enabled" column="enabled"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="AlertRuleColumns">
+        id, user_id, name, metric, op, threshold, level, enabled, created_at, updated_at
+    </sql>
+
+</mapper>

@@ -38,7 +38,10 @@ function LazyEChart({ option, style }: LazyEChartProps) {
       chartRef.current = init(ref.current);
     }
 
-    chartRef.current.setOption(option as ECOption, true);
+    chartRef.current.setOption(option as ECOption, {
+      notMerge: false,
+      lazyUpdate: true
+    });
 
     const onResize = () => chartRef.current?.resize();
     window.addEventListener("resize", onResize);

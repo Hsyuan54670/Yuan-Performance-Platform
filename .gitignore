@@ -39,3 +39,6 @@ Desktop.ini
 
 jmeter/scripts/*
 jmeter/results/*
+
+doc/*
+docs/*

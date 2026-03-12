@@ -11,6 +11,7 @@ import com.yuan.test.entity.*;
 import com.yuan.test.jmeter.JmeterExecutionManager;
 import com.yuan.test.jmeter.JmeterTestPlanBuilder;
 import com.yuan.test.mapper.*;
+import com.yuan.test.mq.TestStatusProducer;
 import com.yuan.test.service.TestTaskService;
 import com.yuan.test.vo.TestMetricVO;
 import com.yuan.test.vo.TestTaskVO;
@@ -25,6 +26,7 @@ import java.util.List;
 
 @Service
 public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> implements TestTaskService {
+    private final TestStatusProducer tsProducer;
     private final TestTaskRunMapper ttrMapper;
     private final TaskMetricAggregator taskMetricAggregator;
     private final TestSceneStepMapper tssMapper;
@@ -33,7 +35,8 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
     private final TestMetricSecondMapper tsmMapper;
     private final JmeterTestPlanBuilder jmeterTestPlanBuilder;
     private final JmeterExecutionManager jmeterExecutionManager;
-    public TestTaskServiceImpl(TestSceneMapper tsMapper, TestPlanMapper tpMapper, TestMetricSecondMapper tsmMapper, JmeterTestPlanBuilder jmeterTestPlanBuilder, JmeterExecutionManager jmeterExecutionManager, TestSceneStepMapper testSceneStepMapper, TaskMetricAggregator taskMetricAggregator, TestTaskRunMapper testTaskRunMapper) {
+    public TestTaskServiceImpl(TestStatusProducer tsProducer, TestSceneMapper tsMapper, TestPlanMapper tpMapper, TestMetricSecondMapper tsmMapper, JmeterTestPlanBuilder jmeterTestPlanBuilder, JmeterExecutionManager jmeterExecutionManager, TestSceneStepMapper testSceneStepMapper, TaskMetricAggregator taskMetricAggregator, TestTaskRunMapper testTaskRunMapper) {
+        this.tsProducer = tsProducer;
         this.tsMapper = tsMapper;
         this.tpMapper = tpMapper;
         this.tsmMapper = tsmMapper;
@@ -75,6 +78,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
 
     @Override
     public R<Void> start(Long id, Long userId) {
+
         // 1. 权限和状态检查
         TestTask testTask = this.getById(id);
         if(testTask==null){
@@ -113,6 +117,8 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
                 LocalDateTime.now()
         );
         ttrMapper.insert(taskRun);
+
+
         ListedHashTree testPlanTree = null;
         TaskResultCollector resultCollector = new TaskResultCollector(taskMetricAggregator, id, taskRun.getId());
         try {
@@ -126,6 +132,9 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
             testTask.setEndTime(LocalDateTime.now());
             this.updateById(testTask);
             ttrMapper.updateById(taskRun);
+
+            tsProducer.send(id, taskRun.getId(), "FAILED", "任务启动失败");
+
             return R.fail(500, "JMeter启动失败");
         }
         // 3. 启动压测
@@ -137,13 +146,19 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
             testTask.setEndTime(LocalDateTime.now());
             this.updateById(testTask);
             ttrMapper.updateById(taskRun);
-            return R.fail(HttpStatus.CONFLICT,"任务正在运行中");
+
+            tsProducer.send(id, taskRun.getId(), "FAILED", "任务启动失败");
+
+            return R.fail(HttpStatus.CONFLICT,"任务当前无法启动");
         }
 
         testTask.setStatus("RUNNING");
         testTask.setStartTime(now);
         testTask.setEndTime(null);
         this.updateById(testTask);
+
+        tsProducer.send(id, taskRun.getId(), "RUNNING", "任务开始执行");
+
         return R.success();
     }
 
@@ -179,6 +194,10 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
             testTask.setStatus("STOPPED");
             testTask.setEndTime(LocalDateTime.now());
             this.updateById(testTask);
+
+
+            tsProducer.send(id, taskRun.getId(), "STOPPED", "任务被用户停止");
+
             return R.success();
         }
         return R.fail(HttpStatus.CONFLICT,"未运行状态不可停止");

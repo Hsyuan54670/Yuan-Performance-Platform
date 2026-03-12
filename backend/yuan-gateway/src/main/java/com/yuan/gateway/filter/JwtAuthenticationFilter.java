@@ -70,7 +70,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         return "/auth/login".equals(path)
                 || "/auth/refresh".equals(path)
                 || "/test/mock/ping".equals(path)
-                || "/test/mock/order".equals(path);
+                || "/test/mock/order".equals(path)
+                || path.startsWith("/ws/");
     }
 
     public Map<String,Object> isValidToken(String token) {

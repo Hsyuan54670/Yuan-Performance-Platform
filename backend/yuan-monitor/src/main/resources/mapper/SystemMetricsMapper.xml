@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yuan.monitor.mapper.SystemMetricsMapper">
+
+    <resultMap id="SystemMetricsRecordResultMap" type="com.yuan.monitor.entity.SystemMetricsRecord">
+        <id property="id" column="id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="ts" column="ts"/>
+        <result property="cpu" column="cpu"/>
+        <result property="memory" column="memory"/>
+        <result property="disk" column="disk"/>
+        <result property="networkIn" column="network_in"/>
+        <result property="networkOut" column="network_out"/>
+    </resultMap>
+
+    <sql id="SystemMetricsColumns">
+        id, task_id, ts, cpu, memory, disk, network_in, network_out
+    </sql>
+
+</mapper>

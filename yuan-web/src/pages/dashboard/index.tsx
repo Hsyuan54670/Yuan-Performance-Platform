@@ -10,10 +10,17 @@ import { useAppStore } from "../../store/appStore";
 function DashboardPage() {
   const navigate = useNavigate();
   const { activeTaskId } = useAppStore();
-  const { connected, series } = useWebSocket(activeTaskId);
+  const { series, transport } = useWebSocket(activeTaskId);
   const { t } = useTranslation();
 
   const xAxis = useMemo(() => series.map((item) => item.time), [series]);
+  const realtimeTagColor = transport === "websocket" ? "green" : transport === "polling" ? "gold" : "default";
+  const realtimeLabel =
+    transport === "websocket"
+      ? t("dashboard.realtimeConnected")
+      : transport === "polling"
+        ? t("dashboard.realtimeFallback")
+        : t("dashboard.realtimeDisconnected");
 
   return (
     <div className="page-shell">
@@ -26,9 +33,7 @@ function DashboardPage() {
               </Typography.Title>
               <Typography.Text type="secondary">{t("dashboard.subtitle")}</Typography.Text>
               <Space>
-                <Tag color={connected ? "green" : "default"}>
-                  {connected ? t("dashboard.realtimeConnected") : t("dashboard.realtimeDisconnected")}
-                </Tag>
+                <Tag color={realtimeTagColor}>{realtimeLabel}</Tag>
                 <Button type="primary" icon={<RocketOutlined />} onClick={() => navigate("/test/task")}>{t("dashboard.runTask")}</Button>
                 <Button icon={<ArrowRightOutlined />} onClick={() => navigate("/analysis/report")}>{t("dashboard.openAiReport")}</Button>
               </Space>
@@ -61,11 +66,12 @@ function DashboardPage() {
               title={t("dashboard.chartTitle")}
               xAxis={xAxis}
               area
-              yAxisName={t("dashboard.chartYAxis")}
+              yAxisName={t("dashboard.seriesQps")}
+              secondaryYAxisName="ms / %"
               series={[
-                { name: t("dashboard.seriesQps"), color: "#0b7285", data: series.map((item) => item.qps) },
-                { name: t("dashboard.seriesP99"), color: "#e8590c", data: series.map((item) => item.p99) },
-                { name: t("dashboard.seriesError"), color: "#c92a2a", data: series.map((item) => item.errorRate) }
+                { name: t("dashboard.seriesQps"), color: "#0b7285", data: series.map((item) => item.qps), yAxisIndex: 0 },
+                { name: t("dashboard.seriesP99"), color: "#e8590c", data: series.map((item) => item.p99), yAxisIndex: 1 },
+                { name: t("dashboard.seriesError"), color: "#c92a2a", data: series.map((item) => item.errorRate), yAxisIndex: 1 }
               ]}
             />
           </Card>

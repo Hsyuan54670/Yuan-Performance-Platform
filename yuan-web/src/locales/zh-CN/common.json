@@ -50,6 +50,7 @@
     "title": "性能指挥看板",
     "subtitle": "以实时压测指标联动 AI 诊断流程，快速洞察风险。",
     "realtimeConnected": "实时通道已连接",
+    "realtimeFallback": "轮询回退中",
     "realtimeDisconnected": "已断开",
     "runTask": "启动任务",
     "openAiReport": "查看 AI 报告",
@@ -100,6 +101,7 @@
     "title": "任务控制台",
     "subtitle": "启动、停止并实时观察压测任务指标（每秒刷新）。",
     "wsOnline": "WebSocket 在线",
+    "wsFallback": "轮询回退中",
     "wsOffline": "离线",
     "startTask": "启动任务",
     "stopTask": "停止任务",
@@ -126,6 +128,7 @@
     "title": "实时监控",
     "subtitle": "WebSocket 流状态：{{status}}",
     "connected": "已连接",
+    "polling": "轮询回退中",
     "disconnected": "未连接",
     "cpuAvg": "CPU 平均",
     "memoryAvg": "内存平均",
@@ -265,5 +268,8 @@
     }
   }
 }
+
+
+
 
 

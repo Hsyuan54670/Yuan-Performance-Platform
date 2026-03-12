@@ -344,4 +344,6 @@ INSERT INTO report_record (id, task_id, title, grade, summary, created_at) VALUE
 
 SET FOREIGN_KEY_CHECKS = 1;
 
+
+
 SELECT 'Split databases initialized: yuan_auth/yuan_test/yuan_monitor/yuan_analysis/yuan_report' AS message;

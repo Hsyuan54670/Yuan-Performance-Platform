@@ -17,6 +17,12 @@ spring:
       host: 172.23.80.90
       port: 6379
       password: Lqy147258369
+  rabbitmq:
+    host: 172.23.80.90
+    port: 5672
+    username: producer
+    password: 123456
+    virtual-host: test_monitor
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.yuan.monitor.mapper.AlertRecordMapper">
+
+    <resultMap id="AlertRecordResultMap" type="com.yuan.monitor.entity.AlertRecord">
+        <id property="id" column="id"/>
+        <result property="taskId" column="task_id"/>
+        <result property="ruleId" column="rule_id"/>
+        <result property="ruleName" column="rule_name"/>
+        <result property="level" column="level"/>
+        <result property="currentValue" column="current_value"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <sql id="AlertRecordColumns">
+        id, task_id, rule_id, rule_name, level, current_value, created_at
+    </sql>
+
+</mapper>

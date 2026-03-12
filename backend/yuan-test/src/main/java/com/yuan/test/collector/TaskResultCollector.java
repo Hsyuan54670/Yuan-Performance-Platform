@@ -27,8 +27,6 @@ public class TaskResultCollector extends ResultCollector {
         // 1. 获取样本结果
         SampleResult sampleResult = event.getResult();
         // 2. 记录样本结果
-        log.info("TaskResultCollector received sample: runId={}, time={}, success={}",
-                runId , sampleResult.getTime(), sampleResult.isSuccessful());
         aggregator.record(taskId,runId, sampleResult);
     }
 }

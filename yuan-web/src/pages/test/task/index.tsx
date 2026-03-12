@@ -1,6 +1,6 @@
 import { PauseCircleOutlined, PlayCircleOutlined, WifiOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Row, Space, Statistic, Table, Tag, Typography, message } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSystemMetricsApi } from "../../../api/monitor";
 import { listTasksApi, startTaskApi, stopTaskApi } from "../../../api/test";
@@ -23,10 +23,12 @@ function TestTaskPage() {
     networkOut: 0
   });
   const { activeTaskId, setActiveTaskId } = useAppStore();
-  const { connected, series } = useWebSocket(activeTaskId);
+  const activeTask = tasks.find((item) => item.id === activeTaskId) || tasks[0];
+  const realtimeResetKey = `${activeTaskId}-${activeTask?.startTime ?? "idle"}`;
+  const { transport, series } = useWebSocket(activeTaskId, realtimeResetKey);
   const { t } = useTranslation();
 
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     const resp = await listTasksApi();
     setTasks(resp);
     if (!resp.length) {
@@ -35,14 +37,67 @@ function TestTaskPage() {
     if (!resp.some((item) => item.id === activeTaskId)) {
       setActiveTaskId(resp[0].id);
     }
-  };
-
-  useEffect(() => {
-    loadTasks();
-    getSystemMetricsApi().then(setSysMetric);
   }, [activeTaskId, setActiveTaskId]);
 
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const pollTasks = async () => {
+      try {
+        await loadTasks();
+      } catch {
+        // Keep the last successful task snapshot to avoid flicker on transient failures.
+      } finally {
+        if (!disposed) {
+          timer = setTimeout(pollTasks, 3000);
+        }
+      }
+    };
+
+    pollTasks();
+
+    return () => {
+      disposed = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [loadTasks]);
+
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const pollSystemMetrics = async () => {
+      try {
+        const metrics = await getSystemMetricsApi();
+        if (!disposed) {
+          setSysMetric(metrics);
+        }
+      } catch {
+        // Keep the last successful metrics sample.
+      } finally {
+        if (!disposed) {
+          timer = setTimeout(pollSystemMetrics, 3000);
+        }
+      }
+    };
+
+    pollSystemMetrics();
+
+    return () => {
+      disposed = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
+
   const xAxis = useMemo(() => series.map((s) => s.time), [series]);
+  const connectionTagColor = transport === "websocket" ? "green" : transport === "polling" ? "gold" : "default";
+  const connectionLabel =
+    transport === "websocket" ? t("testTask.wsOnline") : transport === "polling" ? t("testTask.wsFallback") : t("testTask.wsOffline");
 
   const statusCodeOption = {
     tooltip: { trigger: "item" },
@@ -50,7 +105,7 @@ function TestTaskPage() {
     series: [
       {
         type: "pie",
-        radius: ["44%", "72%"],
+        radius: ["46%", "74%"],
         label: { formatter: "{b}: {d}%" },
         data: [
           { value: 85, name: "200" },
@@ -67,15 +122,15 @@ function TestTaskPage() {
     <div className="page-shell">
       <Row gutter={[16, 16]}>
         <Col span={24}>
-          <Card className="glass-card" style={{ borderRadius: 18 }}>
-            <Space style={{ width: "100%", justifyContent: "space-between" }}>
+          <Card className="glass-card task-console-hero" style={{ borderRadius: 18 }}>
+            <div className="task-console-hero__content">
               <div>
                 <Typography.Title level={3} style={{ margin: 0 }}>{t("testTask.title")}</Typography.Title>
                 <Typography.Text type="secondary">{t("testTask.subtitle")}</Typography.Text>
               </div>
-              <Space>
-                <Tag color={connected ? "green" : "default"} icon={<WifiOutlined />}>
-                  {connected ? t("testTask.wsOnline") : t("testTask.wsOffline")}
+              <Space wrap>
+                <Tag color={connectionTagColor} icon={<WifiOutlined />}>
+                  {connectionLabel}
                 </Tag>
                 <Button
                   type="primary"
@@ -110,12 +165,66 @@ function TestTaskPage() {
                   {t("testTask.stopTask")}
                 </Button>
               </Space>
-            </Space>
+            </div>
           </Card>
         </Col>
 
-        <Col xs={24} lg={10}>
-          <Card className="glass-card" title={t("testTask.taskList")} style={{ borderRadius: 18 }}>
+        <Col xs={24} md={12} xl={7} className="task-console-top-col">
+          <Card className="glass-card task-console-card task-console-card--top" title={t("testTask.snapshot")} style={{ borderRadius: 18 }}>
+            <div className="task-console-snapshot">
+              <div className="task-console-snapshot__header">
+                <div>
+                  <Typography.Text type="secondary">{t("testTask.colPlan")}</Typography.Text>
+                  <Typography.Title level={4} style={{ margin: "4px 0 0" }}>
+                    {activeTask?.planName || "--"}
+                  </Typography.Title>
+                </div>
+                <Tag color={activeTask?.status === "RUNNING" ? "green" : activeTask?.status === "SUCCESS" ? "blue" : activeTask?.status === "FAILED" ? "red" : "default"}>
+                  {activeTask?.status || "--"}
+                </Tag>
+              </div>
+
+              <Row gutter={[16, 16]}>
+                <Col span={12}>
+                  <Statistic title={t("testTask.qps")} value={series.at(-1)?.qps ?? 0} suffix="req/s" precision={0} />
+                </Col>
+                <Col span={12}>
+                  <Statistic title={t("testTask.p99")} value={series.at(-1)?.p99 ?? 0} suffix="ms" precision={0} />
+                </Col>
+                <Col span={12}>
+                  <Statistic
+                    title={t("testTask.errorRate")}
+                    value={series.at(-1)?.errorRate ?? 0}
+                    suffix="%"
+                    precision={2}
+                    valueStyle={{ color: (series.at(-1)?.errorRate || 0) > 5 ? "#c92a2a" : undefined }}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Statistic title={t("testTask.colTask")} value={activeTask?.id ?? undefined} formatter={(value) => value ?? "--"} />
+                </Col>
+              </Row>
+
+              <div className="task-console-snapshot__meta">
+                <div>
+                  <Typography.Text type="secondary">{t("testTask.taskStart")}</Typography.Text>
+                  <div>{activeTask?.startTime ? formatDateTime(activeTask.startTime) : "--"}</div>
+                </div>
+                <div>
+                  <Typography.Text type="secondary">Scene</Typography.Text>
+                  <div>{activeTask?.sceneName || "--"}</div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </Col>
+
+        <Col xs={24} md={12} xl={9} className="task-console-top-col">
+          <RealtimeMetricsPanel metric={sysMetric} compact className="task-console-card task-console-card--top" />
+        </Col>
+
+        <Col xs={24} xl={8} className="task-console-top-col">
+          <Card className="glass-card task-console-card task-console-card--top" title={t("testTask.taskList")} style={{ borderRadius: 18 }}>
             <Table
               rowKey="id"
               size="small"
@@ -132,7 +241,7 @@ function TestTaskPage() {
                   title: t("testTask.colStatus"),
                   dataIndex: "status",
                   render: (value: string) => (
-                    <Tag color={value === "RUNNING" ? "green" : value === "SUCCESS" ? "blue" : "default"}>{value}</Tag>
+                    <Tag color={value === "RUNNING" ? "green" : value === "SUCCESS" ? "blue" : value === "FAILED" ? "red" : "default"}>{value}</Tag>
                   )
                 },
                 {
@@ -145,64 +254,44 @@ function TestTaskPage() {
           </Card>
         </Col>
 
-        <Col xs={24} lg={14}>
-          <Card className="glass-card" title={t("testTask.snapshot")} style={{ borderRadius: 18 }}>
-            <Row gutter={[12, 12]}>
-              <Col span={8}>
-                <Statistic title={t("testTask.qps")} value={series.at(-1)?.qps ?? 0} suffix="req/s" precision={0} />
-              </Col>
-              <Col span={8}>
-                <Statistic title={t("testTask.p99")} value={series.at(-1)?.p99 ?? 0} suffix="ms" precision={0} />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title={t("testTask.errorRate")}
-                  value={series.at(-1)?.errorRate ?? 0}
-                  suffix="%"
-                  precision={2}
-                  valueStyle={{ color: (series.at(-1)?.errorRate || 0) > 5 ? "#c92a2a" : undefined }}
-                />
-              </Col>
-            </Row>
-            <Typography.Text type="secondary">
-              {t("testTask.taskStart")}: {formatDateTime(tasks.find((item) => item.id === activeTaskId)?.startTime || new Date().toISOString())}
-            </Typography.Text>
-          </Card>
-        </Col>
-
-        <Col xs={24} xl={16}>
-          <Card className="glass-card" style={{ borderRadius: 18 }}>
+        <Col xs={24} xl={16} className="task-console-main-col">
+          <Card className="glass-card task-console-card task-console-card--main" style={{ borderRadius: 18 }}>
             <PerformanceChart
               title={t("testTask.realtimeCurves")}
               xAxis={xAxis}
               area
+              yAxisName={t("testTask.qps")}
+              secondaryYAxisName="ms"
+              height={400}
               series={[
-                { name: t("testTask.qps"), color: "#0b7285", data: series.map((s) => s.qps) },
-                { name: t("testTask.seriesP50"), color: "#2b8a3e", data: series.map((s) => s.p50) },
-                { name: t("testTask.seriesP90"), color: "#f08c00", data: series.map((s) => s.p90) },
-                { name: t("testTask.p99"), color: "#c92a2a", data: series.map((s) => s.p99) }
+                { name: t("testTask.qps"), color: "#0b7285", data: series.map((s) => s.qps), yAxisIndex: 0 },
+                { name: t("testTask.seriesP50"), color: "#2b8a3e", data: series.map((s) => s.p50), yAxisIndex: 1 },
+                { name: t("testTask.seriesP90"), color: "#f08c00", data: series.map((s) => s.p90), yAxisIndex: 1 },
+                { name: t("testTask.p99"), color: "#c92a2a", data: series.map((s) => s.p99), yAxisIndex: 1 }
               ]}
             />
           </Card>
         </Col>
 
-        <Col xs={24} xl={8}>
-          <Card className="glass-card" title={t("testTask.statusDistribution")} style={{ borderRadius: 18 }}>
-            <LazyEChart option={statusCodeOption} style={{ height: 280 }} />
-          </Card>
-          <Card className="glass-card" style={{ borderRadius: 18, marginTop: 16 }}>
-            <PerformanceChart
-              title={t("testTask.errorCurve")}
-              xAxis={xAxis}
-              yAxisName="%"
-              series={[{ name: t("testTask.errorRate"), color: "#c92a2a", data: series.map((s) => s.errorRate) }]}
-              height={220}
-            />
-          </Card>
-        </Col>
-
-        <Col span={24}>
-          <RealtimeMetricsPanel metric={sysMetric} />
+        <Col xs={24} xl={8} className="task-console-side-col">
+          <Row gutter={[16, 16]} className="task-console-side-stack">
+            <Col span={24} className="task-console-side-stack__item">
+              <Card className="glass-card task-console-card task-console-card--side" style={{ borderRadius: 18 }}>
+                <PerformanceChart
+                  title={t("testTask.errorCurve")}
+                  xAxis={xAxis}
+                  yAxisName="%"
+                  series={[{ name: t("testTask.errorRate"), color: "#c92a2a", data: series.map((s) => s.errorRate) }]}
+                  height={190}
+                />
+              </Card>
+            </Col>
+            <Col span={24} className="task-console-side-stack__item">
+              <Card className="glass-card task-console-card task-console-card--side" title={t("testTask.statusDistribution")} style={{ borderRadius: 18 }}>
+                <LazyEChart option={statusCodeOption} style={{ height: 190 }} />
+              </Card>
+            </Col>
+          </Row>
         </Col>
       </Row>
     </div>
@@ -210,3 +299,7 @@ function TestTaskPage() {
 }
 
 export default TestTaskPage;
+
+
+
+

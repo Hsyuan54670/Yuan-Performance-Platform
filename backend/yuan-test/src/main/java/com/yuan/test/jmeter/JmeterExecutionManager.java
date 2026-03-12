@@ -1,11 +1,13 @@
 package com.yuan.test.jmeter;
 
+
 import com.yuan.test.collector.TaskMetricAggregator;
 import com.yuan.test.collector.TaskRuntimeContext;
 import com.yuan.test.entity.TestTask;
 import com.yuan.test.entity.TestTaskRun;
 import com.yuan.test.mapper.TestTaskMapper;
 import com.yuan.test.mapper.TestTaskRunMapper;
+import com.yuan.test.mq.TestStatusProducer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.jmeter.engine.StandardJMeterEngine;
 import org.apache.jorphan.collections.ListedHashTree;
@@ -26,13 +28,16 @@ public class JmeterExecutionManager {
     @Autowired
     TestTaskRunMapper ttrMapper;
     @Autowired
+    TestStatusProducer tsProducer;
+    @Autowired
     TaskMetricAggregator taskMetricAggregator;
+    @Autowired
+    JmeterAsyncConfig jmeterAsyncConfig;
 
     private final ConcurrentHashMap<Long, TaskRuntimeContext> jmeterEngineMap = new ConcurrentHashMap<>();
 
     public Boolean start(Long taskId, Long runId, ListedHashTree testPlanTree,Integer durationSeconds){
         if(jmeterEngineMap.containsKey(taskId)){
-            log.info("当前任务-{}正在进行",taskId);
             return false;
         }
         StandardJMeterEngine jmeterEngine = new StandardJMeterEngine();
@@ -45,7 +50,51 @@ public class JmeterExecutionManager {
         context.setDurationSeconds(durationSeconds);
         context.setStopped(false);
         jmeterEngineMap.put(taskId, context);
-        jmeterEngine.run();
+
+        try {
+            jmeterAsyncConfig.taskExecutor().execute(() -> {
+                try {
+                    jmeterEngine.run();
+                } catch (Exception e) {
+                    log.error("执行任务-{}时发生异常: {}", taskId, e.getMessage());
+                    jmeterEngineMap.remove(taskId);
+                    taskMetricAggregator.markRunFinished(runId);
+                    TestTaskRun testTaskRun = ttrMapper.selectById(runId);
+                    if(testTaskRun != null) {
+                        testTaskRun.setStatus("FAILED");
+                        testTaskRun.setEndTime(LocalDateTime.now());
+                        ttrMapper.updateById(testTaskRun);
+                        TestTask testTask = ttMapper.selectById(taskId);
+                        if (testTask != null) {
+                            testTask.setStatus("FAILED");
+                            testTask.setEndTime(LocalDateTime.now());
+                            ttMapper.updateById(testTask);
+                            tsProducer.send(taskId, runId, "FAILED", "任务执行失败，异常信息：" + e.getMessage());
+                        }
+                    }
+                }
+            });
+        } catch (Exception e) {
+            jmeterEngineMap.remove(taskId);
+            taskMetricAggregator.markRunFinished(runId);
+
+            TestTaskRun testTaskRun = ttrMapper.selectById(runId);
+            if (testTaskRun != null) {
+                testTaskRun.setStatus("FAILED");
+                testTaskRun.setEndTime(LocalDateTime.now());
+                ttrMapper.updateById(testTaskRun);
+            }
+
+            TestTask testTask = ttMapper.selectById(taskId);
+            if (testTask != null) {
+                testTask.setStatus("FAILED");
+                testTask.setEndTime(LocalDateTime.now());
+                ttMapper.updateById(testTask);
+            }
+
+            tsProducer.send(taskId, runId, "FAILED", "任务提交线程池失败");
+            return false;
+        }
         return true;
     }
 
@@ -66,7 +115,6 @@ public class JmeterExecutionManager {
 
     @Scheduled(fixedRate = 5000)
     public void monitor(){
-        log.debug("当前正在执行的任务列表：{}",jmeterEngineMap.keySet());
         for(Long taskId:jmeterEngineMap.keySet()){
             TaskRuntimeContext context = jmeterEngineMap.get(taskId);
             if(context == null){
@@ -76,7 +124,7 @@ public class JmeterExecutionManager {
             }
             StandardJMeterEngine jmeterEngine = context.getEngine();
             if(jmeterEngine.isActive()){
-                log.info("当前任务-{}正在执行",taskId);
+                continue;
             }else {
                 // 判断任务停止的原因，是正常结束还是被强制停止
                 TestTask testTask = ttMapper.selectById(taskId);
@@ -98,15 +146,24 @@ public class JmeterExecutionManager {
                             testTaskRun.setEndTime(LocalDateTime.now());
                             ttrMapper.updateById(testTaskRun);
                             testTask.setStatus("SUCCESS");
+
+
                         }else {
                             taskMetricAggregator.markRunFinished(testTaskRun.getId());
                             testTaskRun.setStatus("FAILED");
                             testTaskRun.setEndTime(LocalDateTime.now());
                             ttrMapper.updateById(testTaskRun);
                             testTask.setStatus("FAILED");
+
+
+
                         }
                         testTask.setEndTime(LocalDateTime.now());
                         ttMapper.updateById(testTask);
+
+                        tsProducer.send(taskId,testTaskRun.getId(),testTaskRun.getStatus(),
+                                "任务执行"+ (testTaskRun.getStatus().equals("SUCCESS")?"成功":"失败") );
+
                         jmeterEngineMap.remove(taskId);
                     }else{
                         taskMetricAggregator.markRunFinished(testTaskRun.getId());

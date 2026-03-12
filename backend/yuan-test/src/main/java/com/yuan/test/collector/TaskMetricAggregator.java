@@ -3,9 +3,9 @@ package com.yuan.test.collector;
 
 import com.yuan.test.entity.TestMetricSecond;
 import com.yuan.test.mapper.TestMetricSecondMapper;
+import com.yuan.test.mq.TestMetricsProducer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.jmeter.samplers.SampleResult;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
@@ -13,7 +13,6 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -22,10 +21,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /*
 * 聚合器
+* - 负责接收样本数据，按照 runId 和时间（秒）进行聚合
+* - 定时将聚合结果写入数据库
 * */
 @Slf4j
 @Component
 public class TaskMetricAggregator {
+    private final TestMetricsProducer tmProducer;
     private final TestMetricSecondMapper tmsMapper;
     private final Set<Long> finishedRuns = ConcurrentHashMap.newKeySet();
     private final
@@ -34,8 +36,9 @@ public class TaskMetricAggregator {
     private final
     ConcurrentHashMap<Long,Long> runTaskMap = new ConcurrentHashMap<>();
 
-    public TaskMetricAggregator(TestMetricSecondMapper tmsMapper) {
+    public TaskMetricAggregator(TestMetricSecondMapper tmsMapper, TestMetricsProducer testMetricsProducer) {
         this.tmsMapper = tmsMapper;
+        this.tmProducer = testMetricsProducer;
     }
 
     public void record(Long taskId, Long runId,SampleResult sampleResult){
@@ -59,6 +62,7 @@ public class TaskMetricAggregator {
         metricBucket.addSample(sampleResult.getTime(),sampleResult.isSuccessful());
     }
 
+
     @Scheduled(fixedRate = 1000)
     public void flush(){
         // 1. 遍历 buckets
@@ -78,8 +82,10 @@ public class TaskMetricAggregator {
                     BigDecimal errorRate = new BigDecimal(metricBucket.getErrorCount())
                             .divide(qps.compareTo(BigDecimal.ZERO)!=0 ? qps : BigDecimal.ONE, 2, RoundingMode.HALF_UP)
                             .multiply(new BigDecimal(100));
-                    log.info("Flushing metrics: runId={}, bucketTime={}, qps={}, p50={}, p90={}, p99={}, errorRate={}",
-                            runId, bucketTime, qps, p50, p90, p99, errorRate);
+                    if(!runTaskMap.containsKey(runId)){
+                        log.error("runId={}, bucketTime={}", runId, bucketTime);
+                        continue;
+                    }
                     tmsMapper.insert(new TestMetricSecond(
                             null,
                             runTaskMap.get(runId),
@@ -91,6 +97,15 @@ public class TaskMetricAggregator {
                             p99,
                             errorRate
                     ));
+                    tmProducer.send(runTaskMap.get(runId),
+                            runId,
+                            qps,
+                            p50,
+                            p90,
+                            p99,
+                            errorRate,
+                            bucketTime
+                    );
                     // 3. 从 buckets 中移除过期桶
                     taskBuckets.remove(bucketTime);
                 }

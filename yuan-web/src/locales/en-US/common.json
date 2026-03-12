@@ -50,6 +50,7 @@
     "title": "Performance Command Deck",
     "subtitle": "Real-time pressure test visibility with AI diagnosis workflow.",
     "realtimeConnected": "Realtime feed connected",
+    "realtimeFallback": "Polling fallback active",
     "realtimeDisconnected": "Disconnected",
     "runTask": "Run a Task",
     "openAiReport": "Open AI Report",
@@ -100,6 +101,7 @@
     "title": "Task Console",
     "subtitle": "Run, stop and observe active pressure tests with 1-second metric updates.",
     "wsOnline": "WebSocket online",
+    "wsFallback": "Polling fallback",
     "wsOffline": "Offline",
     "startTask": "Start Task",
     "stopTask": "Stop Task",
@@ -126,6 +128,7 @@
     "title": "Realtime Monitoring",
     "subtitle": "WebSocket stream: {{status}}",
     "connected": "connected",
+    "polling": "polling fallback",
     "disconnected": "disconnected",
     "cpuAvg": "CPU Avg",
     "memoryAvg": "Memory Avg",
@@ -265,5 +268,7 @@
     }
   }
 }
+
+
 
 

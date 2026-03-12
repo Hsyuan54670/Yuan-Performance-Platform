@@ -19,6 +19,15 @@ spring:
               uri: lb://yuan-test
               predicates:
                 - Path=/test/**
+            - id: monitor-http-service
+              uri: lb://yuan-monitor
+              predicates:
+                - Path=/monitor/**
+            - id: monitor-ws-service
+              uri: lb:ws://yuan-monitor
+              predicates:
+                - Path=/ws/**
+
   data:
     redis:
       host: 172.23.80.90

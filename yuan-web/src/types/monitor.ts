@@ -6,6 +6,16 @@ export interface SystemMetric {
   networkOut: number;
 }
 
+export interface MetricsSummary {
+  taskId: number | null;
+  runId: number | null;
+  status: string;
+  qps: number;
+  p99: number;
+  errorRate: number;
+  timestamp: string | null;
+}
+
 export interface AlertRule {
   id: number;
   name: string;
