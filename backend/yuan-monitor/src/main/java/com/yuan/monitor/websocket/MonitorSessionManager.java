@@ -5,9 +5,11 @@ import cn.hutool.json.JSONUtil;
 import com.yuan.monitor.vo.RealtimeMetricPushVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -40,22 +42,34 @@ public class MonitorSessionManager {
         if (sessionSet == null ||  sessionSet.isEmpty()) {
             return;
         }
-        try{
-            // 转json
-            String payloadJson = JSONUtil.toJsonStr(payload);
-            // 发TextMessage
-            TextMessage message = new TextMessage(payloadJson);
+        // 转json
+        String payloadJson = JSONUtil.toJsonStr(payload);
+        // 发TextMessage
+        TextMessage message = new TextMessage(payloadJson);
 
-            for (WebSocketSession session : sessionSet) {
-                if(!session.isOpen()) {
-                    removeSession(taskId, session);
-                    continue;
-                }
-                session.sendMessage(message);
+
+
+        for (WebSocketSession session : sessionSet) {
+            if(!session.isOpen()) {
+                removeSession(taskId, session);
+                continue;
             }
-        } catch (Exception e){
-            log.error("Error broadcasting message to taskId {}: {}", taskId, e.getMessage());
+            try {
+                session.sendMessage(message);
+            } catch (IOException e) {
+                log.error("发送WebSocket消息失败: {}", e.getMessage());
+                removeSession(taskId, session);
+
+                try{
+                    if(session.isOpen()){
+                        session.close(CloseStatus.SERVER_ERROR);
+                    }
+                }catch (IOException ex){
+                    log.warn("关闭WebSocket连接失败: {}", ex.getMessage());
+                }
+            }
         }
+
     }
 
 }

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 
 @Data
 public class TestMetricMessage {
+    private Long userId;
     private Long taskId;
     private Long runId;
     private BigDecimal qps;

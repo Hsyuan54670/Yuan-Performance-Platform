@@ -25,7 +25,7 @@ import java.util.List;
 
 
 @Service
-public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> implements TestTaskService {
+public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> implements TestTaskService {
     private final TestStatusProducer tsProducer;
     private final TestTaskRunMapper ttrMapper;
     private final TaskMetricAggregator taskMetricAggregator;
@@ -35,6 +35,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
     private final TestMetricSecondMapper tsmMapper;
     private final JmeterTestPlanBuilder jmeterTestPlanBuilder;
     private final JmeterExecutionManager jmeterExecutionManager;
+
     public TestTaskServiceImpl(TestStatusProducer tsProducer, TestSceneMapper tsMapper, TestPlanMapper tpMapper, TestMetricSecondMapper tsmMapper, JmeterTestPlanBuilder jmeterTestPlanBuilder, JmeterExecutionManager jmeterExecutionManager, TestSceneStepMapper testSceneStepMapper, TaskMetricAggregator taskMetricAggregator, TestTaskRunMapper testTaskRunMapper) {
         this.tsProducer = tsProducer;
         this.tsMapper = tsMapper;
@@ -50,21 +51,22 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
     @Override
     public R<List<TestTaskVO>> tasks(Long userId) {
         List<TestTask> list = this.lambdaQuery()
-                .eq(TestTask::getUserId,userId)
+                .eq(TestTask::getUserId, userId)
                 .orderByDesc(TestTask::getCreatedAt)
                 .list();
 
-        list.forEach(task ->{
+        list.forEach(task -> {
             var scene = tsMapper.selectById(task.getSceneId());
             var plan = tpMapper.selectById(task.getPlanId());
-            if(scene!=null){
+            if (scene != null) {
                 task.setSceneName(scene.getName());
-            }else {
+            } else {
                 task.setSceneName("场景已删除");
             }
-            if(plan!=null){
+            if (plan != null) {
                 task.setPlanName(plan.getName());
-            }else {                 task.setPlanName("计划已删除");
+            } else {
+                task.setPlanName("计划已删除");
             }
         });
 
@@ -76,35 +78,37 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
         return R.success(taskVOList);
     }
 
+    // TODO 状态管理优化
     @Override
     public R<Void> start(Long id, Long userId) {
 
         // 1. 权限和状态检查
         TestTask testTask = this.getById(id);
-        if(testTask==null){
-            return R.fail(HttpStatus.NOT_FOUND,"任务不存在");
-        }        if(!testTask.getUserId().equals(userId)) {
-            return R.fail(HttpStatus.FORBIDDEN,"没有权限操作");
+        if (testTask == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "任务不存在");
         }
-        if("RUNNING".equals(testTask.getStatus())){
-            return R.fail(HttpStatus.CONFLICT,"任务正在运行中");
+        if (!testTask.getUserId().equals(userId)) {
+            return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
+        }
+        if ("RUNNING".equals(testTask.getStatus())) {
+            return R.fail(HttpStatus.CONFLICT, "任务正在运行中");
         }
 
         // 2. 构建 JMeter 测试计划
         TestPlan plan = tpMapper.selectById(testTask.getPlanId());
-        if(plan==null){
-            return R.fail(HttpStatus.NOT_FOUND,"未找到测试计划");
+        if (plan == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "未找到测试计划");
         }
         TestScene scene = tsMapper.selectById(testTask.getSceneId());
-        if(scene==null){
-            return R.fail(HttpStatus.NOT_FOUND,"未找到测试场景");
+        if (scene == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "未找到测试场景");
         }
         LambdaQueryWrapper<TestSceneStep> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(TestSceneStep::getSceneId,scene.getId())
+        wrapper.eq(TestSceneStep::getSceneId, scene.getId())
                 .orderByAsc(TestSceneStep::getStepOrder);
         List<TestSceneStep> steps = tssMapper.selectList(wrapper);
-        if(steps==null || steps.isEmpty()){
-            return R.fail(HttpStatus.CONFLICT,"当前场景没有可执行步骤");
+        if (steps == null || steps.isEmpty()) {
+            return R.fail(HttpStatus.CONFLICT, "当前场景没有可执行步骤");
         }
         LocalDateTime now = LocalDateTime.now();
         TestTaskRun taskRun = new TestTaskRun(
@@ -117,13 +121,27 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
                 LocalDateTime.now()
         );
         ttrMapper.insert(taskRun);
+        taskMetricAggregator.registerRunOwner(taskRun.getId(), userId);
 
-
-        ListedHashTree testPlanTree = null;
+        ListedHashTree testPlanTree;
         TaskResultCollector resultCollector = new TaskResultCollector(taskMetricAggregator, id, taskRun.getId());
         try {
             testPlanTree = jmeterTestPlanBuilder.build(plan, scene, testTask, steps, resultCollector);
-            //SaveService.saveTree(testPlanTree, new FileOutputStream(JMETER_RESULTS_DIR + "task_" + id + ".jmx"));
+        } catch (Exception e) {
+            taskMetricAggregator.markRunFinished(taskRun.getId());
+            taskRun.setStatus("FAILED");
+            taskRun.setEndTime(LocalDateTime.now());
+            testTask.setStatus("FAILED");
+            testTask.setEndTime(LocalDateTime.now());
+            this.updateById(testTask);
+            ttrMapper.updateById(taskRun);
+            tsProducer.send(userId,id, taskRun.getId(), "FAILED", "任务启动失败");
+            return R.fail(500, "JMeter启动失败");
+        }
+
+        boolean started;
+        try {
+            started = jmeterExecutionManager.start(userId,id, taskRun.getId(), testPlanTree, plan.getDuration());
         } catch (Exception e) {
             taskMetricAggregator.markRunFinished(taskRun.getId());
             taskRun.setStatus("FAILED");
@@ -133,23 +151,12 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
             this.updateById(testTask);
             ttrMapper.updateById(taskRun);
 
-            tsProducer.send(id, taskRun.getId(), "FAILED", "任务启动失败");
-
-            return R.fail(500, "JMeter启动失败");
+            tsProducer.send(userId,id, taskRun.getId(), "FAILED", "JMeter启动失败");
+            return R.fail(HttpStatus.INTERNAL_SERVER_ERROR, "JMeter启动失败");
         }
-        // 3. 启动压测
-        if(!jmeterExecutionManager.start(id,taskRun.getId(),testPlanTree, plan.getDuration())){
-            taskMetricAggregator.markRunFinished(taskRun.getId());
-            taskRun.setStatus("FAILED");
-            taskRun.setEndTime(LocalDateTime.now());
-            testTask.setStatus("FAILED");
-            testTask.setEndTime(LocalDateTime.now());
-            this.updateById(testTask);
-            ttrMapper.updateById(taskRun);
 
-            tsProducer.send(id, taskRun.getId(), "FAILED", "任务启动失败");
-
-            return R.fail(HttpStatus.CONFLICT,"任务当前无法启动");
+        if (!started) {
+            return R.fail(HttpStatus.CONFLICT, "任务正在运行中");
         }
 
         testTask.setStatus("RUNNING");
@@ -157,35 +164,34 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
         testTask.setEndTime(null);
         this.updateById(testTask);
 
-        tsProducer.send(id, taskRun.getId(), "RUNNING", "任务开始执行");
-
+        tsProducer.send(userId,id, taskRun.getId(), "RUNNING", "任务开始执行");
         return R.success();
     }
 
     @Override
     public R<Void> stop(Long id, Long userId) {
         TestTask testTask = this.getById(id);
-        if(testTask==null){
-            return R.fail(HttpStatus.CONFLICT,"当前任务未在运行");
+        if (testTask == null) {
+            return R.fail(HttpStatus.CONFLICT, "当前任务未在运行");
         }
-        if(!testTask.getUserId().equals(userId)) {
-            return R.fail(HttpStatus.FORBIDDEN,"没有权限操作");
+        if (!testTask.getUserId().equals(userId)) {
+            return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
         }
 
         LambdaQueryWrapper<TestTaskRun> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(TestTaskRun::getTaskId,id)
-                .eq(TestTaskRun::getStatus,"RUNNING")
+        wrapper.eq(TestTaskRun::getTaskId, id)
+                .eq(TestTaskRun::getStatus, "RUNNING")
                 .orderByDesc(TestTaskRun::getStartTime)
                 .last("limit 1");
         TestTaskRun taskRun = ttrMapper.selectOne(wrapper);
 
-        if(taskRun==null){
-            return R.fail(HttpStatus.CONFLICT,"当前任务未在运行");
+        if (taskRun == null) {
+            return R.fail(HttpStatus.CONFLICT, "当前任务未在运行");
         }
 
-        if("RUNNING".equals(testTask.getStatus())){
-            if(!jmeterExecutionManager.stop(id)){
-                return R.fail(HttpStatus.CONFLICT,"当前任务未在执行中");
+        if ("RUNNING".equals(testTask.getStatus())) {
+            if (!jmeterExecutionManager.stop(id)) {
+                return R.fail(HttpStatus.CONFLICT, "当前任务未在执行中");
             }
             taskMetricAggregator.markRunFinished(taskRun.getId());
             taskRun.setStatus("STOPPED");
@@ -195,12 +201,10 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
             testTask.setEndTime(LocalDateTime.now());
             this.updateById(testTask);
 
-
-            tsProducer.send(id, taskRun.getId(), "STOPPED", "任务被用户停止");
-
+            tsProducer.send(userId,id, taskRun.getId(), "STOPPED", "任务被用户停止");
             return R.success();
         }
-        return R.fail(HttpStatus.CONFLICT,"未运行状态不可停止");
+        return R.fail(HttpStatus.CONFLICT, "未运行状态不可停止");
     }
 
     @Override
@@ -209,17 +213,17 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
         Long sceneId = request.getSceneId();
         Long planId = request.getPlanId();
         TestScene testScene = tsMapper.selectById(sceneId);
-        if(testScene==null){
-            return R.fail(HttpStatus.NOT_FOUND,"场景不存在");
+        if (testScene == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "场景不存在");
         }
-        if(!testScene.getUserId().equals(userId)) {
+        if (!testScene.getUserId().equals(userId)) {
             return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
         }
         TestPlan testPlan = tpMapper.selectById(planId);
-        if(testPlan==null) {
+        if (testPlan == null) {
             return R.fail(HttpStatus.NOT_FOUND, "计划不存在");
         }
-        if(!testPlan.getUserId().equals(userId)) {
+        if (!testPlan.getUserId().equals(userId)) {
             return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
         }
 
@@ -244,34 +248,33 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper,TestTask> im
     public R<List<TestMetricVO>> metrics(Long id, Long userId) {
 
         TestTask testTask = this.getById(id);
-        if(testTask==null){
-            return R.fail(HttpStatus.NOT_FOUND,"任务不存在");
+        if (testTask == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "任务不存在");
         }
-        if(!testTask.getUserId().equals(userId)) {
-            return R.fail(HttpStatus.FORBIDDEN,"没有权限操作");
+        if (!testTask.getUserId().equals(userId)) {
+            return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
         }
 
         LambdaQueryWrapper<TestTaskRun> ttrWrapper = new LambdaQueryWrapper<>();
-        ttrWrapper.eq(TestTaskRun::getTaskId,id)
+        ttrWrapper.eq(TestTaskRun::getTaskId, id)
                 .orderByDesc(TestTaskRun::getStartTime)
                 .last("limit 1");
         TestTaskRun taskRun = ttrMapper.selectOne(ttrWrapper);
-        if(taskRun == null){
+        if (taskRun == null) {
             return R.success(List.of());
         }
 
-        LambdaQueryWrapper<TestMetricSecond> wrapper = new LambdaQueryWrapper<TestMetricSecond>()
-                .eq(TestMetricSecond::getTaskId,id)
-                .eq(TestMetricSecond::getRunId,taskRun.getId())
+        LambdaQueryWrapper<TestMetricSecond> metricWrapper = new LambdaQueryWrapper<TestMetricSecond>()
+                .eq(TestMetricSecond::getTaskId, id)
+                .eq(TestMetricSecond::getRunId, taskRun.getId())
                 .orderByAsc(TestMetricSecond::getTs);
 
-        List<TestMetricSecond> list = tsmMapper.selectList(wrapper);
+        List<TestMetricSecond> list = tsmMapper.selectList(metricWrapper);
 
         List<TestMetricVO> metricVOList = list.stream()
                 .map(TestMetricVO::fromEntity)
                 .toList();
 
         return R.success(metricVOList);
-
     }
 }

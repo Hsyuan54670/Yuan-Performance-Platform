@@ -74,7 +74,6 @@ public class AuthServiceImpl extends ServiceImpl<UserMapper, User> implements Au
         claims.put("userId", userId);
         claims.put("username", user.getUsername());
 
-
         return R.success(buildLoginResponse(user, claims));
     }
 

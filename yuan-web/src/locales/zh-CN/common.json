@@ -6,6 +6,10 @@
     "loading": "加载中...",
     "loadingModule": "模块加载中...",
     "save": "保存",
+    "saveFailed": "保存失败，请稍后重试",
+    "deleteFailed": "删除失败，请稍后重试",
+    "loadFailed": "加载失败，请稍后重试",
+    "noData": "暂无数据",
     "zhCN": "中文",
     "enUS": "英文",
     "statusRunning": "运行中",
@@ -144,6 +148,21 @@
   "monitorAlert": {
     "title": "告警中心",
     "subtitle": "配置阈值规则并查看告警历史。",
+    "backendNote": "当前页面已接入真实后端告警列表，支持规则新增、编辑、启停和删除。",
+    "editRule": "编辑",
+    "deleteRule": "删除",
+    "colAction": "操作",
+    "editDrawerTitle": "编辑告警规则",
+    "saveChanges": "保存修改",
+    "createSuccess": "告警规则创建成功",
+    "updateSuccess": "告警规则更新成功",
+    "switchSuccess": "规则状态已更新",
+    "deleteSuccess": "告警规则已删除",
+    "deleteConfirm": "确定删除这条告警规则吗？",
+    "confirmDelete": "确认删除",
+    "cancel": "取消",
+    "nameRequired": "请输入规则名称",
+    "thresholdRequired": "请输入阈值",
     "newRule": "新建规则",
     "rulesTitle": "告警规则",
     "recordsTitle": "告警记录",
@@ -268,8 +287,4 @@
     }
   }
 }
-
-
-
-
 

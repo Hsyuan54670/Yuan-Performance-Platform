@@ -26,6 +26,8 @@ export interface AlertRule {
   enabled: boolean;
 }
 
+export type AlertRulePayload = Omit<AlertRule, "id">;
+
 export interface AlertRecord {
   id: number;
   taskId: number;

@@ -3,6 +3,7 @@ package com.yuan.monitor.mq;
 import com.yuan.api.test.mq.TestMetricMessage;
 import com.yuan.monitor.entity.MonitorMetricsRecord;
 import com.yuan.monitor.mapper.MonitorMetricsRecordMapper;
+import com.yuan.monitor.service.AlertEvaluateService;
 import com.yuan.monitor.vo.RealtimeMetricPushVO;
 import com.yuan.monitor.websocket.MonitorSessionManager;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +20,8 @@ public class TestMetricsConsumer {
     @Autowired
     MonitorMetricsRecordMapper mmrMapper;
     @Autowired
+    AlertEvaluateService alertEvaluateService;
+    @Autowired
     MonitorSessionManager monitorSessionManager;
     @RabbitListener(queues = TEST_METRIC_QUEUE)
     public void onMessage(TestMetricMessage message) {
@@ -34,6 +37,7 @@ public class TestMetricsConsumer {
         mmr.setErrorRate(message.getErrorRate());
         mmrMapper.insert(mmr);
 
+
         RealtimeMetricPushVO pushVO = new RealtimeMetricPushVO();
         pushVO.setTaskId(message.getTaskId());
         pushVO.setRunId(message.getRunId());
@@ -44,5 +48,7 @@ public class TestMetricsConsumer {
         pushVO.setErrorRate(message.getErrorRate());
         pushVO.setTimestamp(message.getTimestamp());
         monitorSessionManager.broadcast(message.getTaskId(),pushVO);
+
+        alertEvaluateService.evaluateTestMetric(message);
     }
 }

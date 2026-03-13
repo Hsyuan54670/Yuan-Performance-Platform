@@ -22,8 +22,9 @@ public class TestStatusProducer {
         rabbitTemplate.convertAndSend(TEST_MONITOR_EXCHANGE, TEST_STATUS_ROUTING_KEY, message);
     }
 
-    public void send(Long taskId, Long runId, String status, String message){
+    public void send(Long userId,Long taskId, Long runId, String status, String message){
         TestStatusMessage statusMessage = new TestStatusMessage();
+        statusMessage.setUserId(userId);
         statusMessage.setTaskId(taskId);
         statusMessage.setRunId(runId);
         statusMessage.setStatus(status);

@@ -20,9 +20,10 @@ public class AlertRecordServiceImpl implements AlertRecordService {
     }
 
     @Override
-    public R<List<AlertRecordVO>> listAlertRecords() {
+    public R<List<AlertRecordVO>> listAlertRecords(Long userId) {
         LambdaQueryWrapper<AlertRecord> wrapper = new LambdaQueryWrapper<>();
-        wrapper.orderByDesc(AlertRecord::getCreatedAt)
+        wrapper.eq(AlertRecord::getUserId, userId)
+                .orderByDesc(AlertRecord::getCreatedAt)
             .orderByDesc(AlertRecord::getId);
 
         List<AlertRecordVO> records = alertRecordMapper.selectList(wrapper).stream()
@@ -39,6 +40,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
         vo.setLevel(entity.getLevel());
         vo.setCurrentValue(entity.getCurrentValue());
         vo.setCreatedAt(entity.getCreatedAt());
+        vo.setEventType(entity.getEventType());
         return vo;
     }
 }

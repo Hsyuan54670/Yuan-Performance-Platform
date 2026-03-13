@@ -4,6 +4,7 @@ import com.yuan.common.result.R;
 import com.yuan.monitor.service.AlertRecordService;
 import com.yuan.monitor.vo.AlertRecordVO;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,7 +21,7 @@ public class AlertRecordController {
     }
 
     @GetMapping("/alert-records")
-    public R<List<AlertRecordVO>> listAlertRecords() {
-        return alertRecordService.listAlertRecords();
+    public R<List<AlertRecordVO>> listAlertRecords(@RequestHeader("X-User-Id") Long userId) {
+        return alertRecordService.listAlertRecords(userId);
     }
 }

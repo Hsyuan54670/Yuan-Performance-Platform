@@ -36,6 +36,9 @@ public class TaskMetricAggregator {
     private final
     ConcurrentHashMap<Long,Long> runTaskMap = new ConcurrentHashMap<>();
 
+    private final
+    ConcurrentHashMap<Long, Long> runUserMap = new ConcurrentHashMap<>();
+
     public TaskMetricAggregator(TestMetricSecondMapper tmsMapper, TestMetricsProducer testMetricsProducer) {
         this.tmsMapper = tmsMapper;
         this.tmProducer = testMetricsProducer;
@@ -97,7 +100,9 @@ public class TaskMetricAggregator {
                             p99,
                             errorRate
                     ));
-                    tmProducer.send(runTaskMap.get(runId),
+                    tmProducer.send(
+                            runUserMap.get(runId),
+                            runTaskMap.get(runId),
                             runId,
                             qps,
                             p50,
@@ -115,6 +120,7 @@ public class TaskMetricAggregator {
                 buckets.remove(runId);
                 runTaskMap.remove(runId);
                 finishedRuns.remove(runId);
+                runUserMap.remove(runId);
             }
         }
     }
@@ -136,8 +142,12 @@ public class TaskMetricAggregator {
         if(!buckets.containsKey(runId)){
             runTaskMap.remove(runId);
             finishedRuns.remove(runId);
+            runUserMap.remove(runId);
         }
 
     }
 
+    public void registerRunOwner(Long id, Long userId) {
+        runUserMap.put(id, userId);
+    }
 }

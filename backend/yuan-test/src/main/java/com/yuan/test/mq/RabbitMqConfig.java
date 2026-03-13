@@ -4,6 +4,8 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
@@ -35,8 +37,14 @@ public class RabbitMqConfig {
         return BindingBuilder.bind(testMetricQueue()).to(testExchange()).with(TEST_METRIC_ROUTING_KEY);
     }
     @Bean
-    public MessageConverter messageConverter(){
-        return new Jackson2JsonMessageConverter();
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+        RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+
+        // 同时建议传入定制过的 ObjectMapper
+        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();
+        rabbitTemplate.setMessageConverter(converter);
+
+        return rabbitTemplate;
     }
 }
 

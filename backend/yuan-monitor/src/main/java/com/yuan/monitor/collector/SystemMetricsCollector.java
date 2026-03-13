@@ -4,20 +4,19 @@ import com.yuan.monitor.vo.SystemMetricVO;
 import oshi.SystemInfo;
 import oshi.hardware.CentralProcessor;
 import oshi.hardware.GlobalMemory;
+import oshi.hardware.HWDiskStore;
 import oshi.hardware.NetworkIF;
 import org.springframework.stereotype.Component;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.nio.file.FileStore;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+
 /*
-* 系统指标采集器：使用 OSHI 库获取 CPU、内存、网络等系统级指标
-* auth: dou_bao
-* */
+ * 系统指标采集器：使用 OSHI 库获取 CPU、内存、网络等系统级指标
+ * auth: dou_bao
+ * */
 @Component
 public class SystemMetricsCollector {
 
@@ -27,10 +26,12 @@ public class SystemMetricsCollector {
     private static final GlobalMemory MEMORY = SYSTEM_INFO.getHardware().getMemory();
 
     // ====================== 状态快照（保证线程安全） ======================
-    // CPU 快照：保存上一次的 tick 数据
+    // CPU 快照
     private final AtomicReference<long[]> prevCpuTicks = new AtomicReference<>(PROCESSOR.getSystemCpuLoadTicks());
-    // 网络快照：保存上一次的流量数据和时间戳
+    // 网络快照
     private final AtomicReference<NetworkSnapshot> prevNetworkSnapshot = new AtomicReference<>();
+    // 磁盘 IO 快照 (新增)
+    private final AtomicReference<DiskSnapshot> prevDiskSnapshot = new AtomicReference<>();
 
     // 内部类：网络快照
     private static class NetworkSnapshot {
@@ -42,6 +43,17 @@ public class SystemMetricsCollector {
             this.timestamp = timestamp;
             this.bytesRecv = bytesRecv;
             this.bytesSent = bytesSent;
+        }
+    }
+
+    // 内部类：磁盘 IO 快照 (新增)
+    private static class DiskSnapshot {
+        final long timestamp;
+        final long transferTime; // 磁盘 IO 繁忙的累计时间 (ms)
+
+        DiskSnapshot(long timestamp, long transferTime) {
+            this.timestamp = timestamp;
+            this.transferTime = transferTime;
         }
     }
 
@@ -58,16 +70,16 @@ public class SystemMetricsCollector {
     public SystemMetricVO collectCurrentSystemMetrics(String diskPath) {
         SystemMetricVO metric = new SystemMetricVO();
 
-        // 1. CPU 使用率（OSHI 实现，更稳定）
+        // 1. CPU 使用率
         metric.setCpu(getCpuUsage());
 
-        // 2. 内存使用率（OSHI 实现）
+        // 2. 内存使用率
         metric.setMemory(getMemoryUsage());
 
-        // 3. 磁盘使用率（JDK FileStore 实现，保持不变）
+        // 3. 磁盘 IO 使用率 (注意：这里传 path 目前仅用于兼容接口，逻辑是统计所有物理磁盘的总 IO)
         metric.setDisk(getDiskUsage(diskPath));
 
-        // 4. 网络出入流量（OSHI 实现，实时速率 MB/s）
+        // 4. 网络出入流量
         NetworkRate networkRate = getNetworkRate();
         metric.setNetworkIn(networkRate.inRate);
         metric.setNetworkOut(networkRate.outRate);
@@ -75,27 +87,22 @@ public class SystemMetricsCollector {
         return metric;
     }
 
-    // ====================== 1. CPU 使用率（OSHI 实现） ======================
+    // ====================== 1. CPU 使用率 ======================
     private BigDecimal getCpuUsage() {
         long[] prevTicks = prevCpuTicks.get();
         long[] newTicks = PROCESSOR.getSystemCpuLoadTicks();
 
-        // 计算两次采集之间的 CPU 使用率
         double cpuLoad = PROCESSOR.getSystemCpuLoadBetweenTicks(prevTicks, newTicks) * 100;
-
-        // 更新快照
         prevCpuTicks.set(newTicks);
 
-        // 保留 1 位小数
         return BigDecimal.valueOf(cpuLoad).setScale(1, RoundingMode.HALF_UP);
     }
 
-    // ====================== 2. 内存使用率（OSHI 实现） ======================
+    // ====================== 2. 内存使用率 ======================
     private BigDecimal getMemoryUsage() {
         long total = MEMORY.getTotal();
-        long available = MEMORY.getAvailable(); // 实际可用内存（包含缓存）
+        long available = MEMORY.getAvailable();
 
-        // 计算公式：(总内存 - 可用内存) / 总内存 * 100
         BigDecimal usage = BigDecimal.valueOf(total - available)
                 .divide(BigDecimal.valueOf(total), 4, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100))
@@ -104,27 +111,56 @@ public class SystemMetricsCollector {
         return usage;
     }
 
-    // ====================== 3. 磁盘使用率（JDK FileStore 实现） ======================
+    // ====================== 3. 磁盘 IO 使用率  ======================
+
+    /**
+     * 获取磁盘 IO 使用率
+     * 注意：这里统计的是所有物理磁盘的总体 IO 繁忙程度 (Utilization)
+     * 范围：0 - 100
+     */
     private BigDecimal getDiskUsage(String path) {
-        try {
-            Path targetPath = Paths.get(path);
-            FileStore fileStore = Files.getFileStore(targetPath);
+        long currentTime = System.currentTimeMillis();
+        long currentTransferTime = 0;
 
-            long total = fileStore.getTotalSpace();
-            long usable = fileStore.getUsableSpace(); // 实际可用空间（考虑权限）
-            long used = total - usable;
+        // 1. 获取所有物理磁盘并累加它们的 IO 繁忙时间
+        List<HWDiskStore> diskStores = SYSTEM_INFO.getHardware().getDiskStores();
+        for (HWDiskStore disk : diskStores) {
+            // 更新磁盘属性以获取最新数据
+            disk.updateAttributes();
+            // getTransferTime(): 操作系统记录的磁盘忙于读写的总毫秒数
+            currentTransferTime += disk.getTransferTime();
+        }
 
-            return BigDecimal.valueOf(used)
-                    .divide(BigDecimal.valueOf(total), 4, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal.valueOf(100))
-                    .setScale(1, RoundingMode.HALF_UP);
-        } catch (Exception e) {
-            e.printStackTrace();
+        // 2. 获取上一次快照
+        DiskSnapshot prev = prevDiskSnapshot.get();
+        if (prev == null) {
+            // 第一次调用，初始化快照并返回 0
+            prevDiskSnapshot.set(new DiskSnapshot(currentTime, currentTransferTime));
             return BigDecimal.ZERO;
         }
+
+        // 3. 计算差值
+        long timeDelta = currentTime - prev.timestamp;
+        long ioTimeDelta = currentTransferTime - prev.transferTime;
+
+        // 4. 更新快照
+        prevDiskSnapshot.set(new DiskSnapshot(currentTime, currentTransferTime));
+
+        // 5. 边界检查
+        if (timeDelta <= 0 || ioTimeDelta <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        // 6. 计算使用率：(IO 繁忙时间差 / 经过的时间差) * 100
+        // 因为 ioTimeDelta 是所有磁盘的总和，如果有多个磁盘，使用率可能超过 100%，
+        // 通常性能测试中我们看单盘或者取最大值，这里为了简单演示，取 min(100) 或者展示实际值
+        return BigDecimal.valueOf(ioTimeDelta)
+                .multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(timeDelta), 1, RoundingMode.HALF_UP)
+                .min(BigDecimal.valueOf(100)); // 限制最大显示 100%
     }
 
-    // ====================== 4. 网络出入流量（OSHI 实现） ======================
+    // ====================== 4. 网络出入流量 ======================
     private static class NetworkRate {
         final BigDecimal inRate;
         final BigDecimal outRate;
@@ -140,25 +176,21 @@ public class SystemMetricsCollector {
         long currentBytesRecv = 0;
         long currentBytesSent = 0;
 
-        // 获取所有网卡的累计流量（过滤掉虚拟网卡）
         List<NetworkIF> networkIFs = SYSTEM_INFO.getHardware().getNetworkIFs();
         for (NetworkIF networkIF : networkIFs) {
             networkIF.updateAttributes();
-            // 简单过滤：只监控有流量的物理网卡（可选）
             if (networkIF.getBytesRecv() > 0 || networkIF.getBytesSent() > 0) {
                 currentBytesRecv += networkIF.getBytesRecv();
                 currentBytesSent += networkIF.getBytesSent();
             }
         }
 
-        // 初始化快照（第一次调用）
         NetworkSnapshot prev = prevNetworkSnapshot.get();
         if (prev == null) {
             prevNetworkSnapshot.set(new NetworkSnapshot(currentTime, currentBytesRecv, currentBytesSent));
             return new NetworkRate(BigDecimal.ZERO, BigDecimal.ZERO);
         }
 
-        // 计算时间差和流量差
         long timeDiffMs = currentTime - prev.timestamp;
         if (timeDiffMs <= 0) {
             return new NetworkRate(BigDecimal.ZERO, BigDecimal.ZERO);
@@ -167,18 +199,15 @@ public class SystemMetricsCollector {
         long bytesRecvDiff = currentBytesRecv - prev.bytesRecv;
         long bytesSentDiff = currentBytesSent - prev.bytesSent;
 
-        // 计算实时速率（MB/s）
         double timeDiffSec = timeDiffMs / 1000.0;
         BigDecimal inRate = bytesToMBPerSec(bytesRecvDiff, timeDiffSec);
         BigDecimal outRate = bytesToMBPerSec(bytesSentDiff, timeDiffSec);
 
-        // 更新快照
         prevNetworkSnapshot.set(new NetworkSnapshot(currentTime, currentBytesRecv, currentBytesSent));
 
         return new NetworkRate(inRate, outRate);
     }
 
-    // 辅助方法：字节转 MB/s
     private BigDecimal bytesToMBPerSec(long bytes, double seconds) {
         if (seconds <= 0 || bytes <= 0) {
             return BigDecimal.ZERO;

@@ -22,8 +22,9 @@ public class TestMetricsProducer {
         rabbitTemplate.convertAndSend(TEST_MONITOR_EXCHANGE,TEST_METRIC_ROUTING_KEY, message);
     }
 
-    public void send(Long taskId, Long runId, BigDecimal qps, BigDecimal p50,BigDecimal p90,BigDecimal p99, BigDecimal errorRate,LocalDateTime timestamp) {
+    public void send(Long userId,Long taskId, Long runId, BigDecimal qps, BigDecimal p50,BigDecimal p90,BigDecimal p99, BigDecimal errorRate,LocalDateTime timestamp) {
         TestMetricMessage metricMessage = new TestMetricMessage();
+        metricMessage.setUserId(userId);
         metricMessage.setTaskId(taskId);
         metricMessage.setRunId(runId);
         metricMessage.setQps(qps);

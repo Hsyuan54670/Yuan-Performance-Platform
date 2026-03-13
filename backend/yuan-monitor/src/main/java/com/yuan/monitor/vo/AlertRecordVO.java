@@ -12,5 +12,6 @@ public class AlertRecordVO {
     private String ruleName;
     private String level;
     private BigDecimal currentValue;
+    private String eventType;
     private LocalDateTime createdAt;
 }

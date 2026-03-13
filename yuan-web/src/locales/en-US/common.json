@@ -6,6 +6,10 @@
     "loading": "Loading...",
     "loadingModule": "Loading module...",
     "save": "Save",
+    "saveFailed": "Failed to save. Please try again later.",
+    "deleteFailed": "Failed to delete. Please try again later.",
+    "loadFailed": "Failed to load. Please try again later.",
+    "noData": "No data",
     "zhCN": "Chinese",
     "enUS": "English",
     "statusRunning": "Running",
@@ -144,6 +148,21 @@
   "monitorAlert": {
     "title": "Alert Center",
     "subtitle": "Configure threshold rules and inspect alert history.",
+    "backendNote": "This page now supports real alert rule creation, editing, enable switching, and deletion.",
+    "editRule": "Edit",
+    "deleteRule": "Delete",
+    "colAction": "Actions",
+    "editDrawerTitle": "Edit Alert Rule",
+    "saveChanges": "Save Changes",
+    "createSuccess": "Alert rule created",
+    "updateSuccess": "Alert rule updated",
+    "switchSuccess": "Rule status updated",
+    "deleteSuccess": "Alert rule deleted",
+    "deleteConfirm": "Delete this alert rule?",
+    "confirmDelete": "Delete",
+    "cancel": "Cancel",
+    "nameRequired": "Please enter a rule name",
+    "thresholdRequired": "Please enter a threshold",
     "newRule": "New Rule",
     "rulesTitle": "Alert Rules",
     "recordsTitle": "Alert Records",
@@ -268,7 +287,4 @@
     }
   }
 }
-
-
-
 
