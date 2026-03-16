@@ -2,9 +2,10 @@ export type Grade = "A" | "B" | "C" | "D" | "E";
 
 export interface BottleneckItem {
   time: string;
-  type: "CPU" | "MEMORY" | "DATABASE" | "NETWORK" | "CONNECTION_POOL";
+  type: string;
   reason: string;
-  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  evidence?: string;
+  severity: string;
 }
 
 export interface SuggestionItem {
@@ -16,9 +17,13 @@ export interface SuggestionItem {
 
 export interface AnalysisReport {
   taskId: number;
+  runId: number;
   grade: Grade;
   score: number;
   summary: string;
+  status: string;
+  source: string;
+  createdAt: string;
   bottlenecks: BottleneckItem[];
   suggestions: SuggestionItem[];
 }

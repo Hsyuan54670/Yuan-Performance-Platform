@@ -6,7 +6,7 @@ interface BottleneckTimelineProps {
   items: BottleneckItem[];
 }
 
-const colorMap = {
+const colorMap: Record<string, string> = {
   LOW: "green",
   MEDIUM: "blue",
   HIGH: "orange",
@@ -25,10 +25,15 @@ function BottleneckTimeline({ items }: BottleneckTimelineProps) {
             <div>
               <Typography.Text strong>{item.time}</Typography.Text>
               <div style={{ margin: "6px 0" }}>
-                <Tag color="cyan">{t(`components.bottleneckType.${item.type}`)}</Tag>
-                <Tag color={colorMap[item.severity]}>{t(`components.severity.${item.severity}`)}</Tag>
+                <Tag color="cyan">{t(`components.bottleneckType.${item.type}`, { defaultValue: item.type })}</Tag>
+                <Tag color={colorMap[item.severity] ?? "default"}>{t(`components.severity.${item.severity}`, { defaultValue: item.severity })}</Tag>
               </div>
               <Typography.Text type="secondary">{item.reason}</Typography.Text>
+              {item.evidence ? (
+                <div style={{ marginTop: 6 }}>
+                  <Typography.Text style={{ fontSize: 12 }}>{item.evidence}</Typography.Text>
+                </div>
+              ) : null}
             </div>
           )
         }))}

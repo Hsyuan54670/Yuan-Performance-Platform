@@ -1,18 +1,48 @@
 import { ArrowRightOutlined, FireOutlined, RocketOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Row, Space, Statistic, Tag, Typography } from "antd";
-import { useMemo } from "react";
+import { Button, Card, Col, Row, Space, Statistic, Tag, Typography, message } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { listTasksApi } from "../../api/test";
+import ActiveTaskSelector from "../../components/ActiveTaskSelector";
 import PerformanceChart from "../../components/PerformanceChart";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import { useAppStore } from "../../store/appStore";
+import type { TestTask } from "../../types/test";
+import { resolveActiveTaskId } from "../../utils/taskSelection";
+import { getRequestErrorMessage } from "../../utils/request";
 
 function DashboardPage() {
   const navigate = useNavigate();
-  const { activeTaskId } = useAppStore();
-  const { series, transport } = useWebSocket(activeTaskId);
   const { t } = useTranslation();
+  const [tasks, setTasks] = useState<TestTask[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const { activeTaskId, setActiveTaskId } = useAppStore();
+  const { series, transport } = useWebSocket(activeTaskId);
 
+  const loadTasks = useCallback(async () => {
+    setTasksLoading(true);
+    try {
+      const taskList = await listTasksApi();
+      setTasks(taskList);
+      const resolvedTaskId = resolveActiveTaskId(taskList, activeTaskId);
+      if (resolvedTaskId && resolvedTaskId !== activeTaskId) {
+        setActiveTaskId(resolvedTaskId);
+      }
+    } catch (error) {
+      setTasks([]);
+      message.error(getRequestErrorMessage(error, t("common.loadFailed")));
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [activeTaskId, setActiveTaskId, t]);
+
+  useEffect(() => {
+    void loadTasks();
+  }, [loadTasks]);
+
+  const currentTask = useMemo(() => tasks.find((task) => task.id === activeTaskId), [tasks, activeTaskId]);
+  const runningTaskCount = useMemo(() => tasks.filter((task) => task.status === "RUNNING").length, [tasks]);
   const xAxis = useMemo(() => series.map((item) => item.time), [series]);
   const realtimeTagColor = transport === "websocket" ? "green" : transport === "polling" ? "gold" : "default";
   const realtimeLabel =
@@ -27,15 +57,31 @@ function DashboardPage() {
       <Row gutter={[16, 16]}>
         <Col span={24}>
           <Card className="glass-card" style={{ borderRadius: 18 }}>
-            <Space direction="vertical" size={8}>
-              <Typography.Title level={2} style={{ margin: 0 }}>
-                {t("dashboard.title")}
-              </Typography.Title>
-              <Typography.Text type="secondary">{t("dashboard.subtitle")}</Typography.Text>
-              <Space>
-                <Tag color={realtimeTagColor}>{realtimeLabel}</Tag>
-                <Button type="primary" icon={<RocketOutlined />} onClick={() => navigate("/test/task")}>{t("dashboard.runTask")}</Button>
-                <Button icon={<ArrowRightOutlined />} onClick={() => navigate("/analysis/report")}>{t("dashboard.openAiReport")}</Button>
+            <Space direction="vertical" size={16} style={{ width: "100%" }}>
+              <div>
+                <Typography.Title level={2} style={{ margin: 0 }}>
+                  {t("dashboard.title")}
+                </Typography.Title>
+                <Typography.Text type="secondary">{t("dashboard.subtitle")}</Typography.Text>
+              </div>
+              <Space wrap style={{ width: "100%", justifyContent: "space-between" }} align="start">
+                <ActiveTaskSelector
+                  label={t("dashboard.currentTask")}
+                  tasks={tasks}
+                  value={activeTaskId}
+                  loading={tasksLoading}
+                  onChange={setActiveTaskId}
+                />
+                <Space wrap>
+                  <Tag color={realtimeTagColor}>{realtimeLabel}</Tag>
+                  <Button type="primary" icon={<RocketOutlined />} onClick={() => navigate("/test/task")}>{t("dashboard.runTask")}</Button>
+                  <Button icon={<ArrowRightOutlined />} onClick={() => navigate("/analysis/report")}>{t("dashboard.openAiReport")}</Button>
+                </Space>
+              </Space>
+              <Space wrap>
+                <Tag color="blue">{t("analysisReport.taskTag", { taskId: currentTask?.id ?? "--" })}</Tag>
+                <Tag>{currentTask?.planName || "--"}</Tag>
+                <Tag>{currentTask?.sceneName || "--"}</Tag>
               </Space>
             </Space>
           </Card>
@@ -43,7 +89,7 @@ function DashboardPage() {
 
         <Col xs={24} md={8}>
           <Card className="glass-card" style={{ borderRadius: 16 }}>
-            <Statistic title={t("dashboard.activeTasks")} value={1} prefix={<FireOutlined />} />
+            <Statistic title={t("dashboard.activeTasks")} value={runningTaskCount} prefix={<FireOutlined />} />
             <Typography.Text type="secondary">{t("dashboard.activeTasksDesc")}</Typography.Text>
           </Card>
         </Col>

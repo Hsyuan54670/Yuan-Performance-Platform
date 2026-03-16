@@ -1,5 +1,8 @@
 package com.yuan.test.controller;
 
+import com.yuan.api.test.dto.TestMetricDTO;
+import com.yuan.api.test.dto.TestRunBaselineDTO;
+import com.yuan.api.test.dto.TestRunContextDTO;
 import com.yuan.common.result.R;
 import com.yuan.test.dto.TestTaskCreateDTO;
 import com.yuan.test.service.TestTaskService;
@@ -25,7 +28,7 @@ public class TestTaskController {
 
     @PostMapping("/tasks/{id}/start")
     public R<Void> start(@PathVariable Long id, @RequestHeader("X-User-Id") Long userId) {
-        return testTaskService.start(id,userId);
+        return testTaskService.start(id, userId);
     }
 
     @PostMapping("/tasks/{id}/stop")
@@ -49,6 +52,27 @@ public class TestTaskController {
         return testTaskService.metrics(id, userId);
     }
 
+    @GetMapping("/runs/{runId}/metrics")
+    public R<List<TestMetricDTO>> runMetrics(
+            @PathVariable Long runId,
+            @RequestHeader("X-User-Id") Long userId
+    ) {
+        return testTaskService.runMetrics(runId, userId);
+    }
 
+    @GetMapping("/runs/{runId}/context")
+    public R<TestRunContextDTO> runContext(
+            @PathVariable Long runId,
+            @RequestHeader("X-User-Id") Long userId
+    ) {
+        return testTaskService.runContext(runId, userId);
+    }
 
+    @GetMapping("/runs/{runId}/baseline")
+    public R<TestRunBaselineDTO> runBaseline(
+            @PathVariable Long runId,
+            @RequestHeader("X-User-Id") Long userId
+    ) {
+        return testTaskService.runBaseline(runId, userId);
+    }
 }

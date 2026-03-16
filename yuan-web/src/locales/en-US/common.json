@@ -68,7 +68,8 @@
     "chartYAxis": "Value",
     "seriesQps": "QPS",
     "seriesP99": "P99(ms)",
-    "seriesError": "Error(%)"
+    "seriesError": "Error(%)",
+    "currentTask": "Current Task"
   },
   "testPlan": {
     "title": "Test Plan Management",
@@ -126,7 +127,8 @@
     "statusDistribution": "HTTP Status Distribution",
     "errorCurve": "Error Rate Curve",
     "seriesP50": "P50",
-    "seriesP90": "P90"
+    "seriesP90": "P90",
+    "currentTask": "Current Task"
   },
   "monitorRealtime": {
     "title": "Realtime Monitoring",
@@ -196,11 +198,11 @@
   },
   "analysisReport": {
     "loading": "Loading report...",
-    "triggerSuccess": "AI analysis triggered",
+    "triggerSuccess": "Analysis report refreshed",
     "title": "AI Analysis Reports",
     "subtitle": "Rule engine pre-diagnosis + LLM deep reasoning.",
-    "trigger": "Trigger Re-analysis",
-    "listTitle": "Report List",
+    "trigger": "Refresh Report",
+    "listTitle": "Task Report List",
     "detailTitle": "Report Detail",
     "colTask": "Task",
     "colPlan": "Plan",
@@ -210,7 +212,15 @@
     "score": "Score",
     "pipeline": "Hybrid Analysis Pipeline",
     "bottlenecks": "Bottlenecks",
-    "suggestions": "Suggestions"
+    "suggestions": "Suggestions",
+    "runId": "Run ID",
+    "currentTask": "Current Task",
+    "current": "Current",
+    "currentViewing": "Currently Viewing",
+    "taskTag": "Task #{{taskId}}",
+    "createdAt": "Created At",
+    "sourceDataRule": "Rule Analysis",
+    "noReport": "No analysis report for the current task yet"
   },
   "analysisRule": {
     "title": "Analysis Rule Engine",
@@ -293,13 +303,11 @@
       "MEMORY": "MEMORY",
       "DATABASE": "DATABASE",
       "NETWORK": "NETWORK",
-      "CONNECTION_POOL": "CONNECTION_POOL"
+      "CONNECTION_POOL": "CONNECTION_POOL",
+      "HIGH_LATENCY": "High Latency",
+      "ERROR_RATE": "Error Rate",
+      "THROUGHPUT": "Throughput Regression",
+      "STABILITY": "Stability"
     }
   }
 }
-
-
-
-
-
-

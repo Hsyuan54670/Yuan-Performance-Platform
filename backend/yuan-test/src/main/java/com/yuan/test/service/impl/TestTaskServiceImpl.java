@@ -2,6 +2,9 @@ package com.yuan.test.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.yuan.api.test.dto.TestMetricDTO;
+import com.yuan.api.test.dto.TestRunBaselineDTO;
+import com.yuan.api.test.dto.TestRunContextDTO;
 import com.yuan.common.constant.HttpStatus;
 import com.yuan.common.result.R;
 import com.yuan.test.collector.TaskMetricAggregator;
@@ -42,18 +45,20 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
     private final TestSceneStepMapper tssMapper;
     private final TestSceneMapper tsMapper;
     private final TestPlanMapper tpMapper;
-    private final TestMetricSecondMapper tsmMapper;
+    private final TestMetricSecondMapper tmsMapper;
     private final JmeterTestPlanBuilder jmeterTestPlanBuilder;
     private final JmeterExecutionManager jmeterExecutionManager;
 
     @Autowired
     private TestCompletedProducer tcProducer;
+    @Autowired
+    private TestTaskMapper ttMapper;
 
     public TestTaskServiceImpl(TestStatusProducer tsProducer, TestSceneMapper tsMapper, TestPlanMapper tpMapper, TestMetricSecondMapper tsmMapper, JmeterTestPlanBuilder jmeterTestPlanBuilder, JmeterExecutionManager jmeterExecutionManager, TestSceneStepMapper testSceneStepMapper, TaskMetricAggregator taskMetricAggregator, TestTaskRunMapper testTaskRunMapper) {
         this.tsProducer = tsProducer;
         this.tsMapper = tsMapper;
         this.tpMapper = tpMapper;
-        this.tsmMapper = tsmMapper;
+        this.tmsMapper = tsmMapper;
         this.jmeterTestPlanBuilder = jmeterTestPlanBuilder;
         this.jmeterExecutionManager = jmeterExecutionManager;
         this.tssMapper = testSceneStepMapper;
@@ -275,8 +280,143 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
                 .eq(TestMetricSecond::getRunId, taskRun.getId())
                 .orderByAsc(TestMetricSecond::getTs);
 
-        List<TestMetricSecond> list = tsmMapper.selectList(metricWrapper);
+        List<TestMetricSecond> list = tmsMapper.selectList(metricWrapper);
         List<TestMetricVO> metricVOList = list.stream().map(TestMetricVO::fromEntity).toList();
         return R.success(metricVOList);
+    }
+
+    @Override
+    public R<List<TestMetricDTO>> runMetrics(Long runId, Long userId) {
+        TestTaskRun testTaskRun = ttrMapper.selectById(runId);
+        if (testTaskRun == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "测试运行不存在");
+        }
+        TestTask testTask = ttMapper.selectById(testTaskRun.getTaskId());
+        if (testTask == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "测试运行不存在");
+        }
+        if (!testTask.getUserId().equals(userId)) {
+            return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
+        }
+        LambdaQueryWrapper<TestMetricSecond> tmsWrapper = new LambdaQueryWrapper<>();
+        tmsWrapper
+                .eq(TestMetricSecond::getTaskId, testTaskRun.getTaskId())
+                .eq(TestMetricSecond::getRunId, testTaskRun.getId())
+                .orderByAsc(TestMetricSecond::getTs);
+        List<TestMetricDTO> testMetricDTOList = tmsMapper.selectList(tmsWrapper)
+                .stream()
+                .map(testMetricSecond -> {
+                    TestMetricDTO testMetricDTO = new TestMetricDTO();
+                    testMetricDTO.setErrorRate(testMetricSecond.getErrorRate());
+                    testMetricDTO.setP99(testMetricSecond.getP99());
+                    testMetricDTO.setQps(testMetricSecond.getQps());
+                    testMetricDTO.setP90(testMetricSecond.getP90());
+                    testMetricDTO.setP50(testMetricSecond.getP50());
+                    testMetricDTO.setTime(testMetricSecond.getTs());
+                    return testMetricDTO;
+                })
+                .toList();
+        return R.success(testMetricDTOList);
+    }
+
+    @Override
+    public R<TestRunContextDTO> runContext(Long runId, Long userId) {
+        TestTaskRun testTaskRun = ttrMapper.selectById(runId);
+        if (testTaskRun == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "测试运行不存在");
+        }
+        TestTask testTask = ttMapper.selectById(testTaskRun.getTaskId());
+        if (testTask == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "测试运行不存在");
+        }
+        if (!testTask.getUserId().equals(userId)) {
+            return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
+        }
+        TestPlan testPlan = tpMapper.selectById(testTask.getPlanId());
+        if (testPlan == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "测试计划不存在");
+        }
+        TestScene testScene = tsMapper.selectById(testTask.getSceneId());
+        if (testScene == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "测试场景不存在");
+        }
+        TestRunContextDTO testRunContextDTO = new TestRunContextDTO();
+        testRunContextDTO.setRunId(runId);
+        testRunContextDTO.setTaskId(testTask.getId());
+        testRunContextDTO.setPlanName(testPlan.getName());
+        testRunContextDTO.setSceneName(testScene.getName());
+        testRunContextDTO.setStatus(testTaskRun.getStatus());
+        testRunContextDTO.setStartTime(testTaskRun.getStartTime());
+        testRunContextDTO.setEndTime(testTaskRun.getEndTime());
+        testRunContextDTO.setUserId(userId);
+        testRunContextDTO.setConcurrency(testPlan.getConcurrency());
+        testRunContextDTO.setDurationSeconds(testPlan.getDuration());
+
+        return R.success(testRunContextDTO);
+    }
+
+    @Override
+    public R<TestRunBaselineDTO> runBaseline(Long runId, Long userId) {
+        TestTaskRun currentRun = ttrMapper.selectById(runId);
+        if (currentRun == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "测试运行不存在");
+        }
+        TestTask testTask = ttMapper.selectById(currentRun.getTaskId());
+        if (testTask == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "测试运行不存在");
+        }
+        if (!testTask.getUserId().equals(userId)) {
+            return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
+        }
+
+        LambdaQueryWrapper<TestTaskRun> baselineWrapper = new LambdaQueryWrapper<>();
+        baselineWrapper.eq(TestTaskRun::getTaskId, currentRun.getTaskId())
+                .eq(TestTaskRun::getStatus, "SUCCESS")
+                .lt(TestTaskRun::getId, currentRun.getId())
+                .orderByDesc(TestTaskRun::getId)
+                .last("limit 1");
+        TestTaskRun baselineRun = ttrMapper.selectOne(baselineWrapper);
+        if (baselineRun == null) {
+            return R.success(emptyBaseline());
+        }
+
+        LambdaQueryWrapper<TestMetricSecond> metricWrapper = new LambdaQueryWrapper<>();
+        metricWrapper.eq(TestMetricSecond::getTaskId, baselineRun.getTaskId())
+                .eq(TestMetricSecond::getRunId, baselineRun.getId())
+                .orderByAsc(TestMetricSecond::getTs);
+        List<TestMetricSecond> metrics = tmsMapper.selectList(metricWrapper);
+
+        return R.success(buildBaseline(baselineRun.getId(), metrics));
+    }
+
+    private TestRunBaselineDTO emptyBaseline() {
+        TestRunBaselineDTO baseline = new TestRunBaselineDTO();
+        baseline.setBaselineRunId(null);
+        baseline.setAvgQps(BigDecimal.ZERO);
+        baseline.setP99(BigDecimal.ZERO);
+        baseline.setErrorRate(BigDecimal.ZERO);
+        return baseline;
+    }
+
+    private TestRunBaselineDTO buildBaseline(Long baselineRunId, List<TestMetricSecond> metrics) {
+        TestRunBaselineDTO baseline = new TestRunBaselineDTO();
+        baseline.setBaselineRunId(baselineRunId);
+        if (metrics == null || metrics.isEmpty()) {
+            baseline.setAvgQps(BigDecimal.ZERO);
+            baseline.setP99(BigDecimal.ZERO);
+            baseline.setErrorRate(BigDecimal.ZERO);
+            return baseline;
+        }
+
+        BigDecimal avgQps = metrics.stream()
+                .map(TestMetricSecond::getQps)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(metrics.size()), 2, BigDecimal.ROUND_HALF_UP);
+
+        TestMetricSecond lastMetric = metrics.get(metrics.size() - 1);
+        baseline.setAvgQps(avgQps);
+        baseline.setP99(lastMetric.getP99());
+        baseline.setErrorRate(lastMetric.getErrorRate());
+        return baseline;
     }
 }

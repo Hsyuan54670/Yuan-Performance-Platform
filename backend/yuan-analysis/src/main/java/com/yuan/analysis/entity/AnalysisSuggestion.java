@@ -9,29 +9,18 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("analysis_bottleneck")
-public class BottleneckRecord {
-    @TableId(value = "id", type = IdType.AUTO)
+@TableName("analysis_suggestion")
+public class AnalysisSuggestion {
+    @TableId(value = "id",type = IdType.AUTO)
     private Long id;
-
     @TableField("report_id")
     private Long reportId;
-
-    @TableField("time_point")
-    private String timePoint;
-
-    @TableField("type")
-    private String type;
-
-    @TableField("reason")
-    private String reason;
-
-    @TableField("evidence")
-    private String evidence;
-
-    @TableField("severity")
-    private String severity;
-
+    @TableField("priority")
+    private String priority;
+    @TableField("title")
+    private String title;
+    @TableField("detail")
+    private String detail;
     @TableField("created_at")
     private LocalDateTime createdAt;
 }

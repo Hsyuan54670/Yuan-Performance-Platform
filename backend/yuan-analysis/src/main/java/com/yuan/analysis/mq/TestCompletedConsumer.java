@@ -18,6 +18,6 @@ public class TestCompletedConsumer {
     @RabbitListener(queues = TEST_COMPLETED_QUEUE)
     public void onMessage(TestCompletedMessage message) {
         log.info("Received test completed message: {}", message);
-
+        analysisService.handleMessage(message);
     }
 }

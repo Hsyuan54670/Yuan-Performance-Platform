@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSystemMetricsApi } from "../../../api/monitor";
 import { listTasksApi, startTaskApi, stopTaskApi } from "../../../api/test";
+import ActiveTaskSelector from "../../../components/ActiveTaskSelector";
 import LazyEChart from "../../../components/LazyEChart";
 import PerformanceChart from "../../../components/PerformanceChart";
 import RealtimeMetricsPanel from "../../../components/RealtimeMetricsPanel";
@@ -12,6 +13,7 @@ import { useAppStore } from "../../../store/appStore";
 import type { SystemMetric } from "../../../types/monitor";
 import type { TestTask } from "../../../types/test";
 import { formatDateTime, formatPercent } from "../../../utils/format";
+import { resolveActiveTaskId } from "../../../utils/taskSelection";
 
 function TestTaskPage() {
   const [tasks, setTasks] = useState<TestTask[]>([]);
@@ -31,11 +33,9 @@ function TestTaskPage() {
   const loadTasks = useCallback(async () => {
     const resp = await listTasksApi();
     setTasks(resp);
-    if (!resp.length) {
-      return;
-    }
-    if (!resp.some((item) => item.id === activeTaskId)) {
-      setActiveTaskId(resp[0].id);
+    const resolvedTaskId = resolveActiveTaskId(resp, activeTaskId);
+    if (resolvedTaskId && resolvedTaskId !== activeTaskId) {
+      setActiveTaskId(resolvedTaskId);
     }
   }, [activeTaskId, setActiveTaskId]);
 
@@ -55,7 +55,7 @@ function TestTaskPage() {
       }
     };
 
-    pollTasks();
+    void pollTasks();
 
     return () => {
       disposed = true;
@@ -84,7 +84,7 @@ function TestTaskPage() {
       }
     };
 
-    pollSystemMetrics();
+    void pollSystemMetrics();
 
     return () => {
       disposed = true;
@@ -128,42 +128,51 @@ function TestTaskPage() {
                 <Typography.Title level={3} style={{ margin: 0 }}>{t("testTask.title")}</Typography.Title>
                 <Typography.Text type="secondary">{t("testTask.subtitle")}</Typography.Text>
               </div>
-              <Space wrap>
-                <Tag color={connectionTagColor} icon={<WifiOutlined />}>
-                  {connectionLabel}
-                </Tag>
-                <Button
-                  type="primary"
-                  icon={<PlayCircleOutlined />}
-                  onClick={async () => {
-                    const taskId = activeTaskId || tasks[0]?.id;
-                    if (!taskId) {
-                      message.warning(t("testTask.selectTaskFirst"));
-                      return;
-                    }
-                    await startTaskApi(taskId);
-                    await loadTasks();
-                    message.success(t("testTask.startSuccess"));
-                  }}
-                >
-                  {t("testTask.startTask")}
-                </Button>
-                <Button
-                  danger
-                  icon={<PauseCircleOutlined />}
-                  onClick={async () => {
-                    const taskId = activeTaskId || tasks[0]?.id;
-                    if (!taskId) {
-                      message.warning(t("testTask.selectTaskFirst"));
-                      return;
-                    }
-                    await stopTaskApi(taskId);
-                    await loadTasks();
-                    message.info(t("testTask.stopSuccess"));
-                  }}
-                >
-                  {t("testTask.stopTask")}
-                </Button>
+              <Space wrap align="start">
+                <ActiveTaskSelector
+                  label={t("testTask.currentTask")}
+                  tasks={tasks}
+                  value={activeTaskId}
+                  onChange={setActiveTaskId}
+                  width={320}
+                />
+                <Space wrap>
+                  <Tag color={connectionTagColor} icon={<WifiOutlined />}>
+                    {connectionLabel}
+                  </Tag>
+                  <Button
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    onClick={async () => {
+                      const taskId = activeTaskId || tasks[0]?.id;
+                      if (!taskId) {
+                        message.warning(t("testTask.selectTaskFirst"));
+                        return;
+                      }
+                      await startTaskApi(taskId);
+                      await loadTasks();
+                      message.success(t("testTask.startSuccess"));
+                    }}
+                  >
+                    {t("testTask.startTask")}
+                  </Button>
+                  <Button
+                    danger
+                    icon={<PauseCircleOutlined />}
+                    onClick={async () => {
+                      const taskId = activeTaskId || tasks[0]?.id;
+                      if (!taskId) {
+                        message.warning(t("testTask.selectTaskFirst"));
+                        return;
+                      }
+                      await stopTaskApi(taskId);
+                      await loadTasks();
+                      message.info(t("testTask.stopSuccess"));
+                    }}
+                  >
+                    {t("testTask.stopTask")}
+                  </Button>
+                </Space>
               </Space>
             </div>
           </Card>
@@ -299,7 +308,3 @@ function TestTaskPage() {
 }
 
 export default TestTaskPage;
-
-
-
-

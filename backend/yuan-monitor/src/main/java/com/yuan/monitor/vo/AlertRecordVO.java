@@ -11,6 +11,7 @@ public class AlertRecordVO {
     private Long taskId;
     private Long runId;
     private String ruleName;
+    private String metric;
     private String level;
     private BigDecimal currentValue;
     private String eventType;

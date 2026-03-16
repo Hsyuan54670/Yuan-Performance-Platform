@@ -139,20 +139,26 @@ export const analysisRules: AnalysisRule[] = [
 
 export const analysisReport: AnalysisReport = {
   taskId: 3001,
+  runId: 9001,
   grade: "B",
   score: 83,
   summary: "Throughput is healthy but response-time tail and occasional error spikes need tuning.",
+  status: "SUCCESS",
+  source: "DATA_RULE",
+  createdAt: "2026-03-07T10:12:00",
   bottlenecks: [
     {
-      time: "10:03:15",
-      type: "CPU",
-      reason: "CPU exceeded 82% while P99 climbed above 1500 ms.",
+      time: "运行摘要",
+      type: "HIGH_LATENCY",
+      reason: "Tail latency increased significantly during the run.",
+      evidence: "p99=1520ms, baselineP99=980ms, p99Change=55.10%, highLatencySeconds=6",
       severity: "HIGH"
     },
     {
-      time: "10:05:40",
-      type: "CONNECTION_POOL",
-      reason: "Connection pool saturation caused transient 5xx errors.",
+      time: "运行摘要",
+      type: "ERROR_RATE",
+      reason: "Transient server-side failures were observed.",
+      evidence: "errorRate=1.78%, baselineErrorRate=0.35%, errorChange=408.57%, errorSpikeSeconds=4",
       severity: "CRITICAL"
     }
   ],
@@ -224,6 +230,8 @@ export const menuTree = [
   { id: 5, name: "Report", path: "/report" },
   { id: 6, name: "System", path: "/system/user" }
 ];
+
+
 
 
 

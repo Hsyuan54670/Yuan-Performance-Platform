@@ -68,7 +68,8 @@
     "chartYAxis": "数值",
     "seriesQps": "QPS",
     "seriesP99": "P99(ms)",
-    "seriesError": "错误率(%)"
+    "seriesError": "错误率(%)",
+    "currentTask": "当前任务"
   },
   "testPlan": {
     "title": "压测计划管理",
@@ -126,7 +127,8 @@
     "statusDistribution": "HTTP 状态码分布",
     "errorCurve": "错误率曲线",
     "seriesP50": "P50",
-    "seriesP90": "P90"
+    "seriesP90": "P90",
+    "currentTask": "当前任务"
   },
   "monitorRealtime": {
     "title": "实时监控",
@@ -196,11 +198,11 @@
   },
   "analysisReport": {
     "loading": "分析报告加载中...",
-    "triggerSuccess": "已触发 AI 重新分析",
+    "triggerSuccess": "已刷新分析报告",
     "title": "AI 分析报告",
     "subtitle": "规则引擎预判 + LLM 深度推理",
-    "trigger": "触发重新分析",
-    "listTitle": "报告列表",
+    "trigger": "刷新报告",
+    "listTitle": "任务报告列表",
     "detailTitle": "报告详情",
     "colTask": "任务",
     "colPlan": "计划",
@@ -210,7 +212,15 @@
     "score": "评分",
     "pipeline": "混合分析流水线",
     "bottlenecks": "瓶颈数",
-    "suggestions": "建议数"
+    "suggestions": "建议数",
+    "runId": "运行ID",
+    "currentTask": "当前任务",
+    "current": "当前",
+    "currentViewing": "当前正在查看",
+    "taskTag": "任务 #{{taskId}}",
+    "createdAt": "生成时间",
+    "sourceDataRule": "规则分析",
+    "noReport": "当前任务暂无分析报告"
   },
   "analysisRule": {
     "title": "分析规则引擎",
@@ -293,13 +303,11 @@
       "MEMORY": "内存",
       "DATABASE": "数据库",
       "NETWORK": "网络",
-      "CONNECTION_POOL": "连接池"
+      "CONNECTION_POOL": "连接池",
+      "HIGH_LATENCY": "高延迟",
+      "ERROR_RATE": "错误率",
+      "THROUGHPUT": "吞吐回归",
+      "STABILITY": "稳定性"
     }
   }
 }
-
-
-
-
-
-

@@ -1,9 +1,9 @@
 package com.yuan.analysis.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.yuan.analysis.entity.AnalysisRule;
+import com.yuan.analysis.entity.AnalysisSuggestion;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface AnalysisRuleMapper extends BaseMapper<AnalysisRule> {
+public interface AnalysisSuggestionMapper extends BaseMapper<AnalysisSuggestion> {
 }
