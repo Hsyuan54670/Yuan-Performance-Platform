@@ -31,8 +31,23 @@ export type AlertRulePayload = Omit<AlertRule, "id">;
 export interface AlertRecord {
   id: number;
   taskId: number;
+  runId: number;
   ruleName: string;
   level: "INFO" | "WARN" | "CRITICAL";
+  eventType: "TRIGGER" | "RECOVER";
   currentValue: number;
   createdAt: string;
+}
+
+export interface ActiveAlert {
+  ruleId: number;
+  taskId: number;
+  runId: number;
+  ruleName: string;
+  metric: AlertRule["metric"];
+  op: AlertRule["op"];
+  threshold: number;
+  level: AlertRule["level"];
+  latestValue: number;
+  latestTriggeredAt: string;
 }

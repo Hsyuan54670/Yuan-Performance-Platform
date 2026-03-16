@@ -27,9 +27,14 @@ spring:
               uri: lb:ws://yuan-monitor
               predicates:
                 - Path=/ws/**
+            - id: analysis-service
+              uri: lb://yuan-analysis
+              predicates:
+                - Path=/analysis/**
 
   data:
     redis:
       host: 172.23.80.90
       port: 6379
       password: Lqy147258369
+

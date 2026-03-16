@@ -99,16 +99,20 @@ export const alertRecords: AlertRecord[] = [
   {
     id: 501,
     taskId: 3001,
+    runId: 9001,
     ruleName: "CPU High",
     level: "WARN",
+    eventType: "TRIGGER",
     currentValue: 82.4,
     createdAt: "2026-03-07T10:03:11"
   },
   {
     id: 502,
     taskId: 3001,
+    runId: 9001,
     ruleName: "Error Burst",
     level: "CRITICAL",
+    eventType: "TRIGGER",
     currentValue: 6.9,
     createdAt: "2026-03-07T10:05:44"
   }
@@ -220,3 +224,7 @@ export const menuTree = [
   { id: 5, name: "Report", path: "/report" },
   { id: 6, name: "System", path: "/system/user" }
 ];
+
+
+
+

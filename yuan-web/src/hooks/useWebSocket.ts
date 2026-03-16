@@ -303,4 +303,3 @@ export const useWebSocket = (taskId: number, resetKey?: string | number | null) 
 
   return { connected, series, transport };
 };
-

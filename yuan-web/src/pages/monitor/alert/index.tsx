@@ -12,6 +12,7 @@ import {
   Row,
   Select,
   Space,
+  Statistic,
   Switch,
   Table,
   Tag,
@@ -23,12 +24,13 @@ import { useTranslation } from "react-i18next";
 import {
   createAlertRuleApi,
   deleteAlertRuleApi,
+  listActiveAlertsApi,
   listAlertRecordsApi,
   listAlertRulesApi,
   switchAlertRuleApi,
   updateAlertRuleApi
 } from "../../../api/monitor";
-import type { AlertRecord, AlertRule, AlertRulePayload } from "../../../types/monitor";
+import type { ActiveAlert, AlertRecord, AlertRule, AlertRulePayload } from "../../../types/monitor";
 import { formatDateTime } from "../../../utils/format";
 import { getRequestErrorMessage } from "../../../utils/request";
 
@@ -39,6 +41,7 @@ const levelOptions: AlertRulePayload["level"][] = ["INFO", "WARN", "CRITICAL"];
 function MonitorAlertPage() {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [records, setRecords] = useState<AlertRecord[]>([]);
+  const [activeAlerts, setActiveAlerts] = useState<ActiveAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -49,9 +52,14 @@ function MonitorAlertPage() {
   const loadAlerts = async () => {
     setLoading(true);
     try {
-      const [ruleRows, recordRows] = await Promise.all([listAlertRulesApi(), listAlertRecordsApi()]);
+      const [ruleRows, recordRows, activeRows] = await Promise.all([
+        listAlertRulesApi(),
+        listAlertRecordsApi(),
+        listActiveAlertsApi()
+      ]);
       setRules(ruleRows);
       setRecords(recordRows);
+      setActiveAlerts(activeRows);
     } catch (error) {
       message.error(getRequestErrorMessage(error, t("common.loadFailed")));
     } finally {
@@ -122,6 +130,7 @@ function MonitorAlertPage() {
       await switchAlertRuleApi(rule.id, enabled);
       setRules((current) => current.map((item) => (item.id === rule.id ? { ...item, enabled } : item)));
       message.success(t("monitorAlert.switchSuccess"));
+      await loadAlerts();
     } catch (error) {
       message.error(getRequestErrorMessage(error, t("common.saveFailed")));
     }
@@ -132,10 +141,24 @@ function MonitorAlertPage() {
       await deleteAlertRuleApi(ruleId);
       setRules((current) => current.filter((item) => item.id !== ruleId));
       message.success(t("monitorAlert.deleteSuccess"));
+      await loadAlerts();
     } catch (error) {
       message.error(getRequestErrorMessage(error, t("common.deleteFailed")));
     }
   };
+
+  const renderLevelTag = (value: string) => (
+    <Tag color={value === "CRITICAL" ? "red" : value === "WARN" ? "orange" : "blue"}>{value}</Tag>
+  );
+
+  const renderEventTypeTag = (value: AlertRecord["eventType"]) => (
+    <Tag color={value === "TRIGGER" ? "volcano" : "green"}>
+      {value === "TRIGGER" ? t("monitorAlert.eventTrigger") : t("monitorAlert.eventRecover")}
+    </Tag>
+  );
+
+  const criticalCount = activeAlerts.filter((item) => item.level === "CRITICAL").length;
+  const warnCount = activeAlerts.filter((item) => item.level === "WARN").length;
 
   return (
     <div className="page-shell">
@@ -155,6 +178,53 @@ function MonitorAlertPage() {
           </Card>
         </Col>
 
+        <Col xs={24} md={8}>
+          <Card className="glass-card" style={{ borderRadius: 18 }}>
+            <Statistic title={t("monitorAlert.activeCount")} value={activeAlerts.length} />
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className="glass-card" style={{ borderRadius: 18 }}>
+            <Statistic title={t("monitorAlert.criticalCount")} value={criticalCount} valueStyle={{ color: "#cf1322" }} />
+          </Card>
+        </Col>
+        <Col xs={24} md={8}>
+          <Card className="glass-card" style={{ borderRadius: 18 }}>
+            <Statistic title={t("monitorAlert.warnCount")} value={warnCount} valueStyle={{ color: "#d48806" }} />
+          </Card>
+        </Col>
+
+        <Col span={24}>
+          <Card className="glass-card" title={t("monitorAlert.activeTitle")} style={{ borderRadius: 18 }}>
+            <Table
+              rowKey={(record) => `${record.ruleId}-${record.taskId}-${record.runId}`}
+              loading={loading}
+              dataSource={activeAlerts}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("monitorAlert.noActiveAlerts")} /> }}
+              pagination={{ pageSize: 5 }}
+              columns={[
+                { title: t("monitorAlert.colTask"), dataIndex: "taskId" },
+                { title: t("monitorAlert.colRun"), dataIndex: "runId", render: (value?: number) => value ?? "-" },
+                { title: t("monitorAlert.colRule"), dataIndex: "ruleName" },
+                { title: t("monitorAlert.colMetric"), dataIndex: "metric" },
+                { title: t("monitorAlert.colOp"), dataIndex: "op" },
+                { title: t("monitorAlert.colThreshold"), dataIndex: "threshold" },
+                { title: t("monitorAlert.colCurrent"), dataIndex: "latestValue" },
+                {
+                  title: t("monitorAlert.colLevel"),
+                  dataIndex: "level",
+                  render: (value: string) => renderLevelTag(value)
+                },
+                {
+                  title: t("monitorAlert.colTriggeredAt"),
+                  dataIndex: "latestTriggeredAt",
+                  render: (value: string) => formatDateTime(value)
+                }
+              ]}
+            />
+          </Card>
+        </Col>
+
         <Col xs={24} lg={12}>
           <Card className="glass-card" title={t("monitorAlert.rulesTitle")} style={{ borderRadius: 18 }}>
             <Table
@@ -171,7 +241,7 @@ function MonitorAlertPage() {
                 {
                   title: t("monitorAlert.colLevel"),
                   dataIndex: "level",
-                  render: (value: string) => <Tag color={value === "CRITICAL" ? "red" : value === "WARN" ? "orange" : "blue"}>{value}</Tag>
+                  render: (value: string) => renderLevelTag(value)
                 },
                 {
                   title: t("monitorAlert.colEnabled"),
@@ -216,11 +286,17 @@ function MonitorAlertPage() {
               pagination={{ pageSize: 6 }}
               columns={[
                 { title: t("monitorAlert.colTask"), dataIndex: "taskId" },
+                { title: t("monitorAlert.colRun"), dataIndex: "runId", render: (value?: number) => value ?? "-" },
                 { title: t("monitorAlert.colRule"), dataIndex: "ruleName" },
+                {
+                  title: t("monitorAlert.colEventType"),
+                  dataIndex: "eventType",
+                  render: (value: AlertRecord["eventType"]) => renderEventTypeTag(value)
+                },
                 {
                   title: t("monitorAlert.colLevel"),
                   dataIndex: "level",
-                  render: (value: string) => <Tag color={value === "CRITICAL" ? "red" : value === "WARN" ? "orange" : "blue"}>{value}</Tag>
+                  render: (value: string) => renderLevelTag(value)
                 },
                 { title: t("monitorAlert.colCurrent"), dataIndex: "currentValue" },
                 { title: t("monitorAlert.colTime"), dataIndex: "createdAt", render: (value: string) => formatDateTime(value) }
@@ -267,3 +343,4 @@ function MonitorAlertPage() {
 }
 
 export default MonitorAlertPage;
+

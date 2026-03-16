@@ -23,6 +23,7 @@ public class TestMetricsConsumer {
     AlertEvaluateService alertEvaluateService;
     @Autowired
     MonitorSessionManager monitorSessionManager;
+
     @RabbitListener(queues = TEST_METRIC_QUEUE)
     public void onMessage(TestMetricMessage message) {
         log.info("Received Test metric message: {}", message);
@@ -37,7 +38,6 @@ public class TestMetricsConsumer {
         mmr.setErrorRate(message.getErrorRate());
         mmrMapper.insert(mmr);
 
-
         RealtimeMetricPushVO pushVO = new RealtimeMetricPushVO();
         pushVO.setTaskId(message.getTaskId());
         pushVO.setRunId(message.getRunId());
@@ -47,8 +47,12 @@ public class TestMetricsConsumer {
         pushVO.setP99(message.getP99());
         pushVO.setErrorRate(message.getErrorRate());
         pushVO.setTimestamp(message.getTimestamp());
-        monitorSessionManager.broadcast(message.getTaskId(),pushVO);
+        monitorSessionManager.broadcast(message.getTaskId(), pushVO);
 
-        alertEvaluateService.evaluateTestMetric(message);
+        try {
+            alertEvaluateService.evaluateTestMetric(message);
+        } catch (Exception e) {
+            log.error("Failed to evaluate alert rules for metric message, runId={}, taskId={}", message.getRunId(), message.getTaskId(), e);
+        }
     }
 }

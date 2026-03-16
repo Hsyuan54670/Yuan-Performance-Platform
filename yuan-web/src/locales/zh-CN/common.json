@@ -163,6 +163,14 @@
     "cancel": "取消",
     "nameRequired": "请输入规则名称",
     "thresholdRequired": "请输入阈值",
+    "eventTrigger": "触发",
+    "eventRecover": "恢复",
+    "activeTitle": "当前活跃告警",
+    "activeCount": "活跃告警数",
+    "criticalCount": "严重告警数",
+    "warnCount": "警告告警数",
+    "noActiveAlerts": "当前没有活跃告警",
+    "colTriggeredAt": "首次触发时间",
     "newRule": "新建规则",
     "rulesTitle": "告警规则",
     "recordsTitle": "告警记录",
@@ -173,7 +181,9 @@
     "colLevel": "级别",
     "colEnabled": "启用",
     "colTask": "任务",
+    "colRun": "运行ID",
     "colRule": "规则",
+    "colEventType": "事件类型",
     "colCurrent": "当前值",
     "colTime": "时间",
     "drawerTitle": "创建告警规则",
@@ -287,4 +297,9 @@
     }
   }
 }
+
+
+
+
+
 

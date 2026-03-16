@@ -163,6 +163,14 @@
     "cancel": "Cancel",
     "nameRequired": "Please enter a rule name",
     "thresholdRequired": "Please enter a threshold",
+    "eventTrigger": "Trigger",
+    "eventRecover": "Recover",
+    "activeTitle": "Active Alerts",
+    "activeCount": "Active Alerts",
+    "criticalCount": "Critical Alerts",
+    "warnCount": "Warn Alerts",
+    "noActiveAlerts": "No active alerts",
+    "colTriggeredAt": "Triggered At",
     "newRule": "New Rule",
     "rulesTitle": "Alert Rules",
     "recordsTitle": "Alert Records",
@@ -173,7 +181,9 @@
     "colLevel": "Level",
     "colEnabled": "Enabled",
     "colTask": "Task",
+    "colRun": "Run ID",
     "colRule": "Rule",
+    "colEventType": "Event",
     "colCurrent": "Current",
     "colTime": "Time",
     "drawerTitle": "Create Alert Rule",
@@ -287,4 +297,9 @@
     }
   }
 }
+
+
+
+
+
 

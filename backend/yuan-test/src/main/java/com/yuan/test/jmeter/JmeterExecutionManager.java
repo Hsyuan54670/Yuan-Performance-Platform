@@ -1,12 +1,12 @@
 package com.yuan.test.jmeter;
 
-
 import com.yuan.test.collector.TaskMetricAggregator;
 import com.yuan.test.collector.TaskRuntimeContext;
 import com.yuan.test.entity.TestTask;
 import com.yuan.test.entity.TestTaskRun;
 import com.yuan.test.mapper.TestTaskMapper;
 import com.yuan.test.mapper.TestTaskRunMapper;
+import com.yuan.test.mq.TestCompletedProducer;
 import com.yuan.test.mq.TestStatusProducer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.jmeter.engine.StandardJMeterEngine;
@@ -31,13 +31,15 @@ public class JmeterExecutionManager {
     @Autowired
     TestStatusProducer tsProducer;
     @Autowired
+    TestCompletedProducer tcProducer;
+    @Autowired
     TaskMetricAggregator taskMetricAggregator;
     @Autowired
     ThreadPoolTaskExecutor taskExecutor;
 
     private final ConcurrentHashMap<Long, TaskRuntimeContext> jmeterEngineMap = new ConcurrentHashMap<>();
 
-    public Boolean start(Long userId,Long taskId, Long runId, ListedHashTree testPlanTree, Integer durationSeconds) {
+    public Boolean start(Long userId, Long taskId, Long runId, ListedHashTree testPlanTree, Integer durationSeconds) {
         StandardJMeterEngine jmeterEngine = new StandardJMeterEngine();
         jmeterEngine.configure(testPlanTree);
         TaskRuntimeContext context = new TaskRuntimeContext();
@@ -58,7 +60,7 @@ public class JmeterExecutionManager {
                 try {
                     jmeterEngine.run();
                 } catch (Exception e) {
-                    markAsyncRunFailed(userId,taskId, runId, "任务执行失败，异常信息：" + e.getMessage(), e);
+                    markAsyncRunFailed(userId, taskId, runId, "任务执行失败，异常信息：" + e.getMessage(), e);
                 }
             });
         } catch (Exception e) {
@@ -67,8 +69,8 @@ public class JmeterExecutionManager {
         }
         return true;
     }
-    // TODO read
-    private void markAsyncRunFailed(Long userId,Long taskId, Long runId, String message, Exception exception) {
+
+    private void markAsyncRunFailed(Long userId, Long taskId, Long runId, String message, Exception exception) {
         log.error("执行任务异常，taskId={}, runId={}", taskId, runId, exception);
         jmeterEngineMap.remove(taskId);
         taskMetricAggregator.markRunFinished(runId);
@@ -90,7 +92,8 @@ public class JmeterExecutionManager {
         }
 
         if (runMarkedFailed) {
-            tsProducer.send(userId,taskId, runId, "FAILED", message);
+            tsProducer.send(userId, taskId, runId, "FAILED", message);
+            tcProducer.send(userId, taskId, runId, "FAILED");
         }
     }
 
@@ -121,56 +124,48 @@ public class JmeterExecutionManager {
             StandardJMeterEngine jmeterEngine = context.getEngine();
             if (jmeterEngine.isActive()) {
                 continue;
-            } else {
-                // 判断任务停止的原因，是正常结束还是被强制停止
-                TestTask testTask = ttMapper.selectById(taskId);
-                TestTaskRun testTaskRun = ttrMapper.selectById(context.getRunId());
-                if (testTaskRun == null) {
-                    log.error("未找到任务运行记录，taskId={},runId={}", taskId, context.getRunId());
-                    jmeterEngineMap.remove(taskId);
-                    continue;
-                }
-                if (context.isStopped()) {
-                    jmeterEngineMap.remove(taskId);
-                } else {
-                    if (testTask != null) {
-                        long runTime = Duration.between(context.getStartTime(), LocalDateTime.now()).getSeconds();
-                        if (Math.abs(runTime - context.getDurationSeconds()) <= 5) {
-                            // 正常结束
-                            taskMetricAggregator.markRunFinished(testTaskRun.getId());
-                            testTaskRun.setStatus("SUCCESS");
-                            testTaskRun.setEndTime(LocalDateTime.now());
-                            ttrMapper.updateById(testTaskRun);
-                            testTask.setStatus("SUCCESS");
-
-
-                        } else {
-                            taskMetricAggregator.markRunFinished(testTaskRun.getId());
-                            testTaskRun.setStatus("FAILED");
-                            testTaskRun.setEndTime(LocalDateTime.now());
-                            ttrMapper.updateById(testTaskRun);
-                            testTask.setStatus("FAILED");
-
-
-
-                        }
-                        testTask.setEndTime(LocalDateTime.now());
-                        ttMapper.updateById(testTask);
-
-                        tsProducer.send(testTask.getUserId(),taskId, testTaskRun.getId(), testTaskRun.getStatus(),
-                                "任务执行" + (testTaskRun.getStatus().equals("SUCCESS") ? "成功" : "失败"));
-
-                        jmeterEngineMap.remove(taskId);
-                    } else {
-                        taskMetricAggregator.markRunFinished(testTaskRun.getId());
-                        testTaskRun.setStatus("FAILED");
-                        testTaskRun.setEndTime(LocalDateTime.now());
-                        ttrMapper.updateById(testTaskRun);
-                        log.error("未找到任务记录，taskId={}", taskId);
-                        jmeterEngineMap.remove(taskId);
-                    }
-                }
             }
+
+            TestTask testTask = ttMapper.selectById(taskId);
+            TestTaskRun testTaskRun = ttrMapper.selectById(context.getRunId());
+            if (testTaskRun == null) {
+                log.error("未找到任务运行记录，taskId={},runId={}", taskId, context.getRunId());
+                jmeterEngineMap.remove(taskId);
+                continue;
+            }
+            if (context.isStopped()) {
+                jmeterEngineMap.remove(taskId);
+                continue;
+            }
+            if (testTask == null) {
+                taskMetricAggregator.markRunFinished(testTaskRun.getId());
+                testTaskRun.setStatus("FAILED");
+                testTaskRun.setEndTime(LocalDateTime.now());
+                ttrMapper.updateById(testTaskRun);
+                log.error("未找到任务记录，taskId={}", taskId);
+                jmeterEngineMap.remove(taskId);
+                continue;
+            }
+
+            long runTime = Duration.between(context.getStartTime(), LocalDateTime.now()).getSeconds();
+            taskMetricAggregator.markRunFinished(testTaskRun.getId());
+            if (Math.abs(runTime - context.getDurationSeconds()) <= 5) {
+                testTaskRun.setStatus("SUCCESS");
+                testTask.setStatus("SUCCESS");
+            } else {
+                testTaskRun.setStatus("FAILED");
+                testTask.setStatus("FAILED");
+            }
+            testTaskRun.setEndTime(LocalDateTime.now());
+            ttrMapper.updateById(testTaskRun);
+
+            testTask.setEndTime(LocalDateTime.now());
+            ttMapper.updateById(testTask);
+
+            tsProducer.send(testTask.getUserId(), taskId, testTaskRun.getId(), testTaskRun.getStatus(),
+                    "任务执行" + (testTaskRun.getStatus().equals("SUCCESS") ? "成功" : "失败"));
+            tcProducer.send(testTask.getUserId(), taskId, testTaskRun.getId(), testTaskRun.getStatus());
+            jmeterEngineMap.remove(taskId);
         }
     }
 }

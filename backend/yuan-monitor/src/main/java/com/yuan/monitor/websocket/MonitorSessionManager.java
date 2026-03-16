@@ -1,6 +1,5 @@
 package com.yuan.monitor.websocket;
 
-
 import cn.hutool.json.JSONUtil;
 import com.yuan.monitor.vo.RealtimeMetricPushVO;
 import lombok.extern.slf4j.Slf4j;
@@ -9,7 +8,6 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
-import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -17,59 +15,55 @@ import java.util.concurrent.CopyOnWriteArraySet;
 @Component
 public class MonitorSessionManager {
 
-    private final ConcurrentHashMap<Long,
-            CopyOnWriteArraySet<WebSocketSession>> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, CopyOnWriteArraySet<WebSocketSession>> sessions = new ConcurrentHashMap<>();
 
-    public void addSession(Long taskId,WebSocketSession session) {
-        sessions.computeIfAbsent(taskId,
-                k -> new CopyOnWriteArraySet<>()).add(session);
+    public void addSession(Long taskId, WebSocketSession session) {
+        CopyOnWriteArraySet<WebSocketSession> sessionSet = sessions.computeIfAbsent(taskId, k -> new CopyOnWriteArraySet<>());
+        sessionSet.add(session);
+        log.info("Registered websocket session, taskId={}, sessionId={}, subscribers={}", taskId, session.getId(), sessionSet.size());
     }
 
-    public void removeSession(Long taskId,WebSocketSession session) {
+    public void removeSession(Long taskId, WebSocketSession session) {
         CopyOnWriteArraySet<WebSocketSession> sessionSet = sessions.get(taskId);
         if (sessionSet != null) {
             sessionSet.remove(session);
             if (sessionSet.isEmpty()) {
                 sessions.remove(taskId);
             }
+            log.info("Removed websocket session, taskId={}, sessionId={}, subscribers={}", taskId, session.getId(), sessionSet.size());
         }
     }
 
-    // 广播
     public void broadcast(Long taskId, RealtimeMetricPushVO payload) {
-
         CopyOnWriteArraySet<WebSocketSession> sessionSet = sessions.get(taskId);
-        if (sessionSet == null ||  sessionSet.isEmpty()) {
+        if (sessionSet == null || sessionSet.isEmpty()) {
+            log.debug("Skip websocket broadcast because no subscribers, taskId={}, runId={}", taskId, payload.getRunId());
             return;
         }
-        // 转json
+
         String payloadJson = JSONUtil.toJsonStr(payload);
-        // 发TextMessage
         TextMessage message = new TextMessage(payloadJson);
-
-
+        log.info("Broadcast realtime metric, taskId={}, runId={}, subscribers={}", taskId, payload.getRunId(), sessionSet.size());
 
         for (WebSocketSession session : sessionSet) {
-            if(!session.isOpen()) {
+            if (!session.isOpen()) {
                 removeSession(taskId, session);
                 continue;
             }
             try {
                 session.sendMessage(message);
-            } catch (IOException e) {
-                log.error("发送WebSocket消息失败: {}", e.getMessage());
+            } catch (Exception e) {
+                log.error("Failed to send websocket message, taskId={}, runId={}, sessionId={}", taskId, payload.getRunId(), session.getId(), e);
                 removeSession(taskId, session);
 
-                try{
-                    if(session.isOpen()){
+                try {
+                    if (session.isOpen()) {
                         session.close(CloseStatus.SERVER_ERROR);
                     }
-                }catch (IOException ex){
-                    log.warn("关闭WebSocket连接失败: {}", ex.getMessage());
+                } catch (Exception closeEx) {
+                    log.warn("Failed to close broken websocket session, sessionId={}", session.getId(), closeEx);
                 }
             }
         }
-
     }
-
 }

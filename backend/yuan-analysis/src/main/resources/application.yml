@@ -1,0 +1,29 @@
+server:
+  port: 8084
+spring:
+  application:
+    name: yuan-analysis
+  datasource:
+    url: jdbc:mysql://localhost:3306/yuan_analysis?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 172.23.80.90:8848
+  data:
+    redis:
+      host: 172.23.80.90
+      port: 6379
+      password: Lqy147258369
+  rabbitmq:
+    host: 172.23.80.90
+    port: 5672
+    username: consumer
+    password: 123456
+    virtual-host: test_monitor
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+

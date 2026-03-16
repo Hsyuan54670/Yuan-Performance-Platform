@@ -22,6 +22,9 @@ public class AlertRecord {
     @TableField("task_id")
     private Long taskId;
 
+    @TableField("run_id")
+    private Long runId;
+
     @TableField("rule_id")
     private Long ruleId;
 
@@ -39,5 +42,4 @@ public class AlertRecord {
 
     @TableField("created_at")
     private LocalDateTime createdAt;
-
 }

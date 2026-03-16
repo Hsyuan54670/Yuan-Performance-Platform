@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+
 @Data
 @TableName("test_status_record")
 public class TestStatusRecord {
@@ -15,6 +16,9 @@ public class TestStatusRecord {
 
     @TableField("task_id")
     private Long taskId;
+
+    @TableField("user_id")
+    private Long userId;
 
     @TableField("run_id")
     private Long runId;

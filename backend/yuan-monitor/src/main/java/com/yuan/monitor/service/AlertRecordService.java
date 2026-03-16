@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface AlertRecordService {
     R<List<AlertRecordVO>> listAlertRecords(Long userId);
+
+    R<List<AlertRecordVO>> listAlertRecordsByRunId(Long userId, Long runId);
 }

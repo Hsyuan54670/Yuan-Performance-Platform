@@ -1,4 +1,4 @@
-package com.yuan.test.mq;
+package com.yuan.analysis.mq;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -10,43 +10,25 @@ import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import static com.yuan.api.mq.MqConstants.*;
+import static com.yuan.api.mq.MqConstants.TEST_COMPLETED_QUEUE;
+import static com.yuan.api.mq.MqConstants.TEST_COMPLETED_ROUTING_KEY;
+import static com.yuan.api.mq.MqConstants.YUAN_TEST_EXCHANGE;
 
 @Configuration
 public class RabbitMqConfig {
 
     @Bean
-    public TopicExchange testExchange(){
+    public TopicExchange testExchange() {
         return new TopicExchange(YUAN_TEST_EXCHANGE);
     }
 
     @Bean
-    public Queue testStatusQueue(){
-        return new Queue(TEST_STATUS_QUEUE, true);
-    }
-
-    @Bean
-    public Binding testStatusBinding(){
-        return BindingBuilder.bind(testStatusQueue()).to(testExchange()).with(TEST_STATUS_ROUTING_KEY);
-    }
-
-    @Bean
-    public Queue testMetricQueue(){
-        return new Queue(TEST_METRIC_QUEUE, true);
-    }
-
-    @Bean
-    public Binding testMetricBinding(){
-        return BindingBuilder.bind(testMetricQueue()).to(testExchange()).with(TEST_METRIC_ROUTING_KEY);
-    }
-
-    @Bean
-    public Queue testCompletedQueue(){
+    public Queue testCompletedQueue() {
         return new Queue(TEST_COMPLETED_QUEUE, true);
     }
 
     @Bean
-    public Binding testCompletedBinding(){
+    public Binding testCompletedBinding() {
         return BindingBuilder.bind(testCompletedQueue()).to(testExchange()).with(TEST_COMPLETED_ROUTING_KEY);
     }
 

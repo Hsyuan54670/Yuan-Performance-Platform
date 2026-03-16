@@ -8,8 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
-import static com.yuan.api.mq.MqConstants.TEST_MONITOR_EXCHANGE;
-import static com.yuan.api.mq.MqConstants.TEST_STATUS_ROUTING_KEY;
+import static com.yuan.api.mq.MqConstants.*;
 
 @Slf4j
 @Component
@@ -19,7 +18,7 @@ public class TestStatusProducer {
 
     public void send(TestStatusMessage message) {
         log.info("Sending test status message: {}", message);
-        rabbitTemplate.convertAndSend(TEST_MONITOR_EXCHANGE, TEST_STATUS_ROUTING_KEY, message);
+        rabbitTemplate.convertAndSend(YUAN_TEST_EXCHANGE, TEST_STATUS_ROUTING_KEY, message);
     }
 
     public void send(Long userId,Long taskId, Long runId, String status, String message){

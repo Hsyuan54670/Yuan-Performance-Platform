@@ -19,7 +19,7 @@ public class TestMetricsProducer {
 
     public void send(TestMetricMessage message) {
         log.info("Sending test metric message: {}", message);
-        rabbitTemplate.convertAndSend(TEST_MONITOR_EXCHANGE,TEST_METRIC_ROUTING_KEY, message);
+        rabbitTemplate.convertAndSend(YUAN_TEST_EXCHANGE,TEST_METRIC_ROUTING_KEY, message);
     }
 
     public void send(Long userId,Long taskId, Long runId, BigDecimal qps, BigDecimal p50,BigDecimal p90,BigDecimal p99, BigDecimal errorRate,LocalDateTime timestamp) {

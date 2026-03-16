@@ -13,22 +13,34 @@ import java.time.LocalDateTime;
 public class AlertState {
     @TableId
     private Long id;
+
     @TableField("user_id")
     private Long userId;
+
     @TableField("task_id")
     private Long taskId;
+
+    @TableField("run_id")
+    private Long runId;
+
     @TableField("rule_id")
     private Long ruleId;
+
     @TableField("active")
     private Boolean active;
+
     @TableField("latest_value")
     private BigDecimal latestValue;
-    @TableField("last_triggered_at")
-    private LocalDateTime lastTriggeredAt;
-    @TableField("last_recovered_at")
-    private LocalDateTime lastRecoveredAt;
+
+    @TableField("latest_triggered_at")
+    private LocalDateTime latestTriggeredAt;
+
+    @TableField("latest_recovered_at")
+    private LocalDateTime latestRecoveredAt;
+
     @TableField("created_at")
     private LocalDateTime createdAt;
+
     @TableField("updated_at")
     private LocalDateTime updatedAt;
 }

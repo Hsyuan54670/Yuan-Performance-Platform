@@ -1,4 +1,4 @@
-import type { AlertRecord, AlertRule, AlertRulePayload, MetricsSummary, SystemMetric } from "../types/monitor";
+import type { ActiveAlert, AlertRecord, AlertRule, AlertRulePayload, MetricsSummary, SystemMetric } from "../types/monitor";
 import { request } from "../utils/request";
 
 export const getSystemMetricsApi = async (): Promise<SystemMetric> => {
@@ -13,6 +13,11 @@ export const getMetricsSummaryApi = async (): Promise<MetricsSummary> => {
 
 export const listAlertRulesApi = async (): Promise<AlertRule[]> => {
   const response = await request.get("/monitor/alert-rules");
+  return response.data.data;
+};
+
+export const listActiveAlertsApi = async (): Promise<ActiveAlert[]> => {
+  const response = await request.get("/monitor/alert-states/active");
   return response.data.data;
 };
 
