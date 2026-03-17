@@ -137,7 +137,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         ListedHashTree testPlanTree;
         TaskResultCollector resultCollector = new TaskResultCollector(taskMetricAggregator, id, taskRun.getId());
         try {
-            testPlanTree = jmeterTestPlanBuilder.build(plan, scene, testTask, steps, resultCollector);
+            testPlanTree = jmeterTestPlanBuilder.build(plan, scene, testTask, steps, resultCollector,taskRun);
         } catch (Exception e) {
             taskMetricAggregator.markRunFinished(taskRun.getId());
             taskRun.setStatus("FAILED");
@@ -332,25 +332,21 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         if (!testTask.getUserId().equals(userId)) {
             return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
         }
+
         TestPlan testPlan = tpMapper.selectById(testTask.getPlanId());
-        if (testPlan == null) {
-            return R.fail(HttpStatus.NOT_FOUND, "测试计划不存在");
-        }
         TestScene testScene = tsMapper.selectById(testTask.getSceneId());
-        if (testScene == null) {
-            return R.fail(HttpStatus.NOT_FOUND, "测试场景不存在");
-        }
+
         TestRunContextDTO testRunContextDTO = new TestRunContextDTO();
         testRunContextDTO.setRunId(runId);
         testRunContextDTO.setTaskId(testTask.getId());
-        testRunContextDTO.setPlanName(testPlan.getName());
-        testRunContextDTO.setSceneName(testScene.getName());
+        testRunContextDTO.setPlanName(testPlan != null ? testPlan.getName() : "计划已删除");
+        testRunContextDTO.setSceneName(testScene != null ? testScene.getName() : "场景已删除");
         testRunContextDTO.setStatus(testTaskRun.getStatus());
         testRunContextDTO.setStartTime(testTaskRun.getStartTime());
         testRunContextDTO.setEndTime(testTaskRun.getEndTime());
         testRunContextDTO.setUserId(userId);
-        testRunContextDTO.setConcurrency(testPlan.getConcurrency());
-        testRunContextDTO.setDurationSeconds(testPlan.getDuration());
+        testRunContextDTO.setConcurrency(testPlan != null ? testPlan.getConcurrency() : 0);
+        testRunContextDTO.setDurationSeconds(testPlan != null ? testPlan.getDuration() : 0);
 
         return R.success(testRunContextDTO);
     }
@@ -420,3 +416,4 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         return baseline;
     }
 }
+

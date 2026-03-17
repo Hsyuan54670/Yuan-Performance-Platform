@@ -1,18 +1,24 @@
 package com.yuan.analysis.collector;
 
 import com.yuan.analysis.model.*;
+import com.yuan.api.monitor.dto.RunSystemMetricPointDTO;
+import com.yuan.api.monitor.dto.RunSystemMetricSummaryDTO;
+import com.yuan.api.monitor.feign.MonitorFeignClient;
 import com.yuan.api.test.dto.TestMetricDTO;
 import com.yuan.api.test.dto.TestRunBaselineDTO;
 import com.yuan.api.test.dto.TestRunContextDTO;
 import com.yuan.api.test.feign.TestFeignClient;
+import com.yuan.common.result.R;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeMap;
 
 @Slf4j
 @Component
@@ -20,6 +26,9 @@ import java.util.List;
 public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
     @Autowired
     TestFeignClient testFeignClient;
+
+    @Autowired
+    MonitorFeignClient monitorFeignClient;
 
     @Override
     public AnalysisSnapshot collectSnapshot(Long userId, Long taskId, Long runId, String finalStatus) {
@@ -29,7 +38,7 @@ public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
         snapshot.setRunId(runId);
         snapshot.setFinalStatus(finalStatus);
 
-        TestRunContextDTO testRunContextDTO = null;
+        TestRunContextDTO testRunContextDTO;
         try {
             testRunContextDTO = testFeignClient.getRunContext(userId, runId).getData();
         } catch (Exception e) {
@@ -49,44 +58,42 @@ public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
         runContext.setDurationSeconds(testRunContextDTO.getDurationSeconds());
         snapshot.setContext(runContext);
 
-        List<TestMetricDTO> metrics = null;
+        List<TestMetricDTO> metrics;
         try {
             metrics = testFeignClient.listRunMetrics(userId, runId).getData();
         } catch (Exception e) {
             throw new RuntimeException("服务调用出错");
         }
 
-        List<SecondMetricPoint> metricPoints = toMetricPoints(metrics);
+        List<SecondMetricPoint> businessMetricPoints = toMetricPoints(metrics);
+        List<RunSystemMetricPointDTO> systemMetricPoints = loadRunSystemMetricPoints(userId, runId);
 
-        // 先保存原始时序点，再计算摘要与特征，后续接秒级分析时不用推翻现有模型。
-        snapshot.setSeries(buildSeries(metricPoints));
-        snapshot.setSummary(buildSummary(metricPoints));
-        snapshot.setFeature(buildFeature(metricPoints));
+        snapshot.setSummary(buildSummary(businessMetricPoints));
+        snapshot.setFeature(buildFeature(businessMetricPoints));
+        // 统一时序里既保留业务秒点，也并入资源秒点，方便 AI 做真正的跨信号归因。
+        snapshot.setSeries(buildSeries(mergeSystemMetricPoints(businessMetricPoints, systemMetricPoints)));
+        applySystemMetricSummary(snapshot.getSummary(), snapshot.getFeature(), loadRunSystemMetricSummary(userId, runId));
         snapshot.setBaseline(loadBaseline(userId, runId, snapshot.getSummary()));
         return snapshot;
     }
 
     // 把 test 服务返回的 DTO 转成 analysis 内部统一使用的秒级点模型。
     private List<SecondMetricPoint> toMetricPoints(List<TestMetricDTO> metrics) {
-        List<SecondMetricPoint> secondMetricPoints = null;
         if (metrics == null || metrics.isEmpty()) {
             metrics = new ArrayList<>();
         }
-        secondMetricPoints = metrics
+        return metrics
                 .stream()
                 .map(m -> {
                     SecondMetricPoint point = new SecondMetricPoint();
-                    // point.setCpu(m.getCpu());
-                    // point.setMemory(m.getMemory());
-                    point.setQps(m.getQps());
-                    point.setP50(m.getP50());
-                    point.setP90(m.getP90());
-                    point.setP99(m.getP99());
-                    point.setErrorRate(m.getErrorRate());
+                    point.setQps(defaultValue(m.getQps()));
+                    point.setP50(defaultValue(m.getP50()));
+                    point.setP90(defaultValue(m.getP90()));
+                    point.setP99(defaultValue(m.getP99()));
+                    point.setErrorRate(defaultValue(m.getErrorRate()));
                     point.setTs(m.getTime());
                     return point;
                 }).toList();
-        return secondMetricPoints;
     }
 
     // 时序容器只做轻量封装，后续可以在这里补采样间隔、窗口信息等元数据。
@@ -120,8 +127,6 @@ public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
         summary.setP90(points.getLast().getP90());
         summary.setP99(points.getLast().getP99());
         summary.setErrorRate(points.getLast().getErrorRate());
-        // summary.setAvgCpu();
-        // summary.setAvgMemory();
         summary.setAvgQps(avgQps);
         return summary;
     }
@@ -158,6 +163,107 @@ public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
         feature.setErrorSpikeSeconds(errorSpikeSeconds);
         feature.setHighLatencySeconds(highLatencySeconds);
         return feature;
+    }
+
+    private RunSystemMetricSummaryDTO loadRunSystemMetricSummary(Long userId, Long runId) {
+        try {
+            R<RunSystemMetricSummaryDTO> response = monitorFeignClient.getRunSystemMetricSummary(userId, runId);
+            return response == null ? null : response.getData();
+        } catch (Exception e) {
+            log.warn("Failed to load run system metric summary, runId={}", runId, e);
+            return null;
+        }
+    }
+
+    private List<RunSystemMetricPointDTO> loadRunSystemMetricPoints(Long userId, Long runId) {
+        try {
+            R<List<RunSystemMetricPointDTO>> response = monitorFeignClient.listRunSystemMetricPoints(userId, runId);
+            if (response == null || response.getData() == null) {
+                return List.of();
+            }
+            return response.getData();
+        } catch (Exception e) {
+            log.warn("Failed to load run system metric points, runId={}", runId, e);
+            return List.of();
+        }
+    }
+
+    // 资源秒点按时间戳并入统一序列，缺失业务指标的点保留 null，避免把“未采到”误判成 0。
+    private List<SecondMetricPoint> mergeSystemMetricPoints(List<SecondMetricPoint> businessPoints,
+                                                            List<RunSystemMetricPointDTO> systemPoints) {
+        TreeMap<LocalDateTime, SecondMetricPoint> timeline = new TreeMap<>();
+        List<SecondMetricPoint> pointsWithoutTs = new ArrayList<>();
+
+        if (businessPoints != null) {
+            for (SecondMetricPoint point : businessPoints) {
+                SecondMetricPoint copy = copyPoint(point);
+                if (copy.getTs() == null) {
+                    pointsWithoutTs.add(copy);
+                    continue;
+                }
+                timeline.put(copy.getTs(), copy);
+            }
+        }
+
+        if (systemPoints != null) {
+            for (RunSystemMetricPointDTO systemPoint : systemPoints) {
+                if (systemPoint == null) {
+                    continue;
+                }
+                if (systemPoint.getTs() == null) {
+                    SecondMetricPoint point = new SecondMetricPoint();
+                    point.setCpu(defaultValue(systemPoint.getCpu()));
+                    point.setMemory(defaultValue(systemPoint.getMemory()));
+                    pointsWithoutTs.add(point);
+                    continue;
+                }
+
+                SecondMetricPoint mergedPoint = timeline.computeIfAbsent(systemPoint.getTs(), ts -> {
+                    SecondMetricPoint created = new SecondMetricPoint();
+                    created.setTs(ts);
+                    return created;
+                });
+                mergedPoint.setCpu(defaultValue(systemPoint.getCpu()));
+                mergedPoint.setMemory(defaultValue(systemPoint.getMemory()));
+            }
+        }
+
+        List<SecondMetricPoint> merged = new ArrayList<>(timeline.values());
+        merged.addAll(pointsWithoutTs);
+        return merged;
+    }
+
+    private SecondMetricPoint copyPoint(SecondMetricPoint source) {
+        SecondMetricPoint copy = new SecondMetricPoint();
+        copy.setTs(source.getTs());
+        copy.setQps(source.getQps());
+        copy.setP50(source.getP50());
+        copy.setP90(source.getP90());
+        copy.setP99(source.getP99());
+        copy.setErrorRate(source.getErrorRate());
+        copy.setCpu(source.getCpu());
+        copy.setMemory(source.getMemory());
+        return copy;
+    }
+
+    // 把 monitor 提供的 CPU / Memory 摘要并入快照，让规则引擎和后续 AI 能拿到资源侧证据。
+    private void applySystemMetricSummary(MetricSummary summary, MetricFeature feature, RunSystemMetricSummaryDTO dto) {
+        if (dto == null) {
+            summary.setAvgCpu(BigDecimal.ZERO);
+            summary.setAvgMemory(BigDecimal.ZERO);
+            feature.setPeakCpu(BigDecimal.ZERO);
+            feature.setPeakMemory(BigDecimal.ZERO);
+            feature.setHighCpuSeconds(0);
+            feature.setHighMemorySeconds(0);
+            return;
+        }
+
+        summary.setAvgCpu(defaultValue(dto.getAvgCpu()));
+        summary.setAvgMemory(defaultValue(dto.getAvgMemory()));
+        feature.setPeakCpu(defaultValue(dto.getPeakCpu()));
+        feature.setPeakMemory(defaultValue(dto.getPeakMemory()));
+        feature.setHighCpuSeconds(dto.getHighCpuSeconds() == null ? 0 : dto.getHighCpuSeconds());
+        feature.setHighMemorySeconds(dto.getHighMemorySeconds() == null ? 0 : dto.getHighMemorySeconds());
     }
 
     // 基线来自当前 run 之前最近一次成功运行的摘要，用于吞吐回归等横向对比规则。

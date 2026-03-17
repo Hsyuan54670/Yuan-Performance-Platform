@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { metricsHistoryApi } from "../api/test";
 import { getToken } from "../utils/token";
-import type { RealtimeMetricPoint } from "../types/test";
+import type { RealtimeMetricPoint, TaskStatusPushMessage, TaskStatus } from "../types/test";
 
 export type RealtimeTransport = "websocket" | "polling" | "disconnected";
+export type TaskStatusMessageHandler = (message: TaskStatusPushMessage) => void;
 
 const MAX_SERIES_POINTS = 180;
 const POLL_INTERVAL_MS = 3000;
@@ -59,6 +60,27 @@ const normalizePoint = (payload: unknown): RealtimeMetricPoint | null => {
     p90: toNumber(record.p90),
     p99: toNumber(record.p99),
     errorRate: toNumber(record.errorRate)
+  };
+};
+
+const normalizeTaskStatus = (payload: unknown): TaskStatusPushMessage | null => {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const status = record.status;
+  if (record.messageType !== "TASK_STATUS" || typeof record.taskId !== "number" || typeof status !== "string") {
+    return null;
+  }
+
+  return {
+    messageType: "TASK_STATUS",
+    taskId: record.taskId,
+    runId: typeof record.runId === "number" ? record.runId : null,
+    status: status as TaskStatus,
+    message: typeof record.message === "string" ? record.message : undefined,
+    timestamp: typeof record.timestamp === "string" ? record.timestamp : undefined
   };
 };
 
@@ -127,7 +149,7 @@ const getWebSocketUrl = (taskId: number) => {
   return `${base.replace(/\/$/, "")}/ws/monitor/${taskId}${query}`;
 };
 
-export const useWebSocket = (taskId: number, resetKey?: string | number | null) => {
+export const useWebSocket = (taskId: number, resetKey?: string | number | null, onTaskStatus?: TaskStatusMessageHandler | null) => {
   const [connected, setConnected] = useState(false);
   const [series, setSeries] = useState<RealtimeMetricPoint[]>([]);
   const [transport, setTransport] = useState<RealtimeTransport>("disconnected");
@@ -247,6 +269,12 @@ export const useWebSocket = (taskId: number, resetKey?: string | number | null) 
           return;
         }
 
+        const statusMessage = normalizeTaskStatus(payload);
+        if (statusMessage) {
+          onTaskStatus?.(statusMessage);
+          return;
+        }
+
         const incoming = extractPoints(payload);
         if (!incoming.length) {
           return;
@@ -299,7 +327,7 @@ export const useWebSocket = (taskId: number, resetKey?: string | number | null) 
       closeSocket();
       setConnected(false);
     };
-  }, [taskId, resetKey]);
+  }, [taskId, resetKey, onTaskStatus]);
 
   return { connected, series, transport };
 };

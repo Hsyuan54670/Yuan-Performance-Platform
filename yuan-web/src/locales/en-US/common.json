@@ -5,6 +5,7 @@
   "common": {
     "loading": "Loading...",
     "loadingModule": "Loading module...",
+    "refresh": "Refresh",
     "save": "Save",
     "saveFailed": "Failed to save. Please try again later.",
     "deleteFailed": "Failed to delete. Please try again later.",
@@ -223,8 +224,8 @@
     "noReport": "No analysis report for the current task yet"
   },
   "analysisRule": {
-    "title": "Analysis Rule Engine",
-    "subtitle": "Maintain bottleneck detection rules before LLM deep analysis.",
+    "title": "Analysis Rule Center",
+    "subtitle": "Manage deterministic engine rules and AI analysis rules separately for stable detection and richer explanations.",
     "addRule": "Add Rule",
     "colName": "Name",
     "colExpression": "Expression",
@@ -236,7 +237,38 @@
     "fieldExpression": "Expression",
     "fieldBottleneckType": "Bottleneck Type",
     "fieldSeverity": "Severity",
-    "fieldEnabled": "Enabled"
+    "fieldEnabled": "Enabled",
+    "addEngineRule": "Add Engine Rule",
+    "addAiRule": "Add AI Rule",
+    "engineRulesTitle": "Engine Rule Card",
+    "aiRulesTitle": "AI Rule Card",
+    "engineRulesCount": "{{count}} engine rules",
+    "aiRulesCount": "{{count}} AI rules",
+    "colInstruction": "AI Instruction",
+    "colPriority": "Priority",
+    "colAction": "Action",
+    "editRule": "Edit",
+    "deleteRule": "Delete",
+    "deleteConfirm": "Delete this analysis rule?",
+    "confirmDelete": "Delete",
+    "cancel": "Cancel",
+    "createSuccess": "Analysis rule created",
+    "updateSuccess": "Analysis rule updated",
+    "switchSuccess": "Rule status updated",
+    "deleteSuccess": "Analysis rule deleted",
+    "editDrawerTitle": "Edit Analysis Rule",
+    "createEngineRule": "Create Engine Rule",
+    "createAiRule": "Create AI Rule",
+    "saveChanges": "Save Changes",
+    "fieldRuleType": "Rule Type",
+    "fieldInstruction": "AI Instruction",
+    "fieldPriority": "Priority",
+    "ruleTypeEngine": "Engine Rule",
+    "ruleTypeAi": "AI Rule",
+    "nameRequired": "Please enter a rule name",
+    "expressionRequired": "Please enter an expression",
+    "instructionRequired": "Please enter an AI instruction",
+    "instructionPlaceholder": "For example: when latency and error rate rise together, prioritize downstream dependency and database causes, then output an investigation order."
   },
   "report": {
     "exportSuccess": "Report exported",
@@ -306,8 +338,15 @@
       "CONNECTION_POOL": "CONNECTION_POOL",
       "HIGH_LATENCY": "High Latency",
       "ERROR_RATE": "Error Rate",
+      "CPU_PRESSURE": "CPU Pressure",
+      "MEMORY_PRESSURE": "Memory Pressure",
       "THROUGHPUT": "Throughput Regression",
       "STABILITY": "Stability"
     }
   }
 }
+
+
+
+
+

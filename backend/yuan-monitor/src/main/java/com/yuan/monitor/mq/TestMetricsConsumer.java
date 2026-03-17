@@ -39,6 +39,7 @@ public class TestMetricsConsumer {
         mmrMapper.insert(mmr);
 
         RealtimeMetricPushVO pushVO = new RealtimeMetricPushVO();
+        pushVO.setMessageType("METRIC");
         pushVO.setTaskId(message.getTaskId());
         pushVO.setRunId(message.getRunId());
         pushVO.setQps(message.getQps());
@@ -47,7 +48,7 @@ public class TestMetricsConsumer {
         pushVO.setP99(message.getP99());
         pushVO.setErrorRate(message.getErrorRate());
         pushVO.setTimestamp(message.getTimestamp());
-        monitorSessionManager.broadcast(message.getTaskId(), pushVO);
+        monitorSessionManager.broadcastMetric(message.getTaskId(), pushVO);
 
         try {
             alertEvaluateService.evaluateTestMetric(message);

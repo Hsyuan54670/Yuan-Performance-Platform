@@ -9,14 +9,26 @@ import java.util.List;
 
 @Data
 public class AnalysisComputationResult {
-    /** 报告评级，例如 A / B / C / D */
+    /** 规则基准评级，例如 A / B / C / D */
+    private String baseGrade;
+
+    /** 规则基准评分，范围建议为 0-100 */
+    private Integer baseScore;
+
+    /** 规则基准摘要 */
+    private String baseSummary;
+
+    /** 最终报告评级，例如 A / B / C / D */
     private String grade;
 
-    /** 报告评分，范围建议为 0-100 */
+    /** 最终报告评分，范围建议为 0-100 */
     private Integer score;
 
     /** 本次分析摘要 */
     private String summary;
+
+    /** 报告来源，例如 DATA_RULE / DATA_RULE_AI */
+    private String source;
 
     /** 结构化规则命中结果，后续既可用于落库也可用于拼装 AI Prompt */
     private List<RuleHit> ruleHits = new ArrayList<>();

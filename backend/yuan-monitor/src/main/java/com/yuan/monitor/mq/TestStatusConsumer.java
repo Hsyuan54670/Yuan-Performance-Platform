@@ -3,6 +3,8 @@ package com.yuan.monitor.mq;
 import com.yuan.api.test.mq.TestStatusMessage;
 import com.yuan.monitor.entity.TestStatusRecord;
 import com.yuan.monitor.mapper.TestStatusRecordMapper;
+import com.yuan.monitor.vo.TaskStatusPushVO;
+import com.yuan.monitor.websocket.MonitorSessionManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +18,9 @@ public class TestStatusConsumer {
     @Autowired
     private TestStatusRecordMapper testStatusRecordMapper;
 
+    @Autowired
+    private MonitorSessionManager monitorSessionManager;
+
     @RabbitListener(queues = TEST_STATUS_QUEUE )
     public void onMessage(TestStatusMessage message) {
         TestStatusRecord testStatusRecord = new TestStatusRecord();
@@ -28,5 +33,16 @@ public class TestStatusConsumer {
         log.info("Received test status message: {}", testStatusRecord);
 
         testStatusRecordMapper.insert(testStatusRecord);
+
+        if (message.getTaskId() != null) {
+            TaskStatusPushVO pushVO = new TaskStatusPushVO();
+            pushVO.setMessageType("TASK_STATUS");
+            pushVO.setTaskId(message.getTaskId());
+            pushVO.setRunId(message.getRunId());
+            pushVO.setStatus(message.getStatus());
+            pushVO.setMessage(message.getMessage());
+            pushVO.setTimestamp(message.getTimestamp());
+            monitorSessionManager.broadcastTaskStatus(message.getTaskId(), pushVO);
+        }
     }
 }

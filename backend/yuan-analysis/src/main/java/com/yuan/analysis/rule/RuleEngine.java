@@ -22,11 +22,17 @@ public class RuleEngine {
 
     private static final BigDecimal HIGH_LATENCY_THRESHOLD = BigDecimal.valueOf(2000);
     private static final BigDecimal ERROR_RATE_THRESHOLD = BigDecimal.valueOf(5);
+    private static final BigDecimal AVG_CPU_THRESHOLD = BigDecimal.valueOf(80);
+    private static final BigDecimal PEAK_CPU_THRESHOLD = BigDecimal.valueOf(90);
+    private static final BigDecimal AVG_MEMORY_THRESHOLD = BigDecimal.valueOf(80);
+    private static final BigDecimal PEAK_MEMORY_THRESHOLD = BigDecimal.valueOf(90);
     private static final BigDecimal THROUGHPUT_REGRESSION_RATIO = BigDecimal.valueOf(0.85);
     private static final BigDecimal P99_REGRESSION_RATIO = BigDecimal.valueOf(0.30);
     private static final BigDecimal ERROR_RATE_REGRESSION_RATIO = BigDecimal.ONE;
     private static final int HIGH_LATENCY_SECONDS_THRESHOLD = 3;
     private static final int ERROR_SPIKE_SECONDS_THRESHOLD = 3;
+    private static final int HIGH_CPU_SECONDS_THRESHOLD = 5;
+    private static final int HIGH_MEMORY_SECONDS_THRESHOLD = 5;
     private static final int MIN_SCORE = 55;
 
     public AnalysisComputationResult analyze(AnalysisSnapshot snapshot) {
@@ -41,6 +47,12 @@ public class RuleEngine {
         }
         if (isErrorSpike(snapshot)) {
             hits.add(buildErrorSpikeHit(snapshot));
+        }
+        if (isCpuPressure(snapshot)) {
+            hits.add(buildCpuPressureHit(snapshot));
+        }
+        if (isMemoryPressure(snapshot)) {
+            hits.add(buildMemoryPressureHit(snapshot));
         }
         if (isThroughputRegression(snapshot)) {
             hits.add(buildThroughputRegressionHit(snapshot));
@@ -85,6 +97,28 @@ public class RuleEngine {
         boolean baselineRisk = safe(baseline.getBaselineErrorRate()).compareTo(BigDecimal.ZERO) > 0
                 && errorRateChangeRate.compareTo(ERROR_RATE_REGRESSION_RATIO) >= 0;
         return absoluteRisk || baselineRisk;
+    }
+
+    private boolean isCpuPressure(AnalysisSnapshot snapshot) {
+        MetricSummary summary = snapshot.getSummary();
+        MetricFeature feature = snapshot.getFeature();
+        BigDecimal avgCpu = safe(summary.getAvgCpu());
+        BigDecimal peakCpu = safe(feature.getPeakCpu());
+        int highCpuSeconds = safe(feature.getHighCpuSeconds());
+        return avgCpu.compareTo(AVG_CPU_THRESHOLD) >= 0
+                || peakCpu.compareTo(PEAK_CPU_THRESHOLD) >= 0
+                || highCpuSeconds >= HIGH_CPU_SECONDS_THRESHOLD;
+    }
+
+    private boolean isMemoryPressure(AnalysisSnapshot snapshot) {
+        MetricSummary summary = snapshot.getSummary();
+        MetricFeature feature = snapshot.getFeature();
+        BigDecimal avgMemory = safe(summary.getAvgMemory());
+        BigDecimal peakMemory = safe(feature.getPeakMemory());
+        int highMemorySeconds = safe(feature.getHighMemorySeconds());
+        return avgMemory.compareTo(AVG_MEMORY_THRESHOLD) >= 0
+                || peakMemory.compareTo(PEAK_MEMORY_THRESHOLD) >= 0
+                || highMemorySeconds >= HIGH_MEMORY_SECONDS_THRESHOLD;
     }
 
     private boolean isThroughputRegression(AnalysisSnapshot snapshot) {
@@ -161,6 +195,52 @@ public class RuleEngine {
         return hit;
     }
 
+    private RuleHit buildCpuPressureHit(AnalysisSnapshot snapshot) {
+        BigDecimal avgCpu = safe(snapshot.getSummary().getAvgCpu());
+        BigDecimal peakCpu = safe(snapshot.getFeature().getPeakCpu());
+        int highCpuSeconds = safe(snapshot.getFeature().getHighCpuSeconds());
+
+        RuleHit hit = new RuleHit();
+        hit.setCode("CPU_PRESSURE");
+        hit.setType("CPU_PRESSURE");
+        hit.setSeverity("HIGH");
+        hit.setTitle("CPU 压力偏高");
+        hit.setReason("运行期间 CPU 长时间处于高位，说明应用计算开销、线程竞争或热点逻辑可能已成为性能瓶颈。");
+        hit.setEvidence(String.format(
+                "avgCpu=%s%%, peakCpu=%s%%, highCpuSeconds=%s",
+                avgCpu.stripTrailingZeros().toPlainString(),
+                peakCpu.stripTrailingZeros().toPlainString(),
+                highCpuSeconds
+        ));
+        hit.setPriority("P1");
+        hit.setSuggestionTitle("优先排查热点计算与线程竞争");
+        hit.setSuggestionDetail("建议结合压测窗口检查 CPU profile、GC、线程池队列和热点接口逻辑，确认是否存在计算密集型瓶颈。");
+        return hit;
+    }
+
+    private RuleHit buildMemoryPressureHit(AnalysisSnapshot snapshot) {
+        BigDecimal avgMemory = safe(snapshot.getSummary().getAvgMemory());
+        BigDecimal peakMemory = safe(snapshot.getFeature().getPeakMemory());
+        int highMemorySeconds = safe(snapshot.getFeature().getHighMemorySeconds());
+
+        RuleHit hit = new RuleHit();
+        hit.setCode("MEMORY_PRESSURE");
+        hit.setType("MEMORY_PRESSURE");
+        hit.setSeverity("HIGH");
+        hit.setTitle("内存压力偏高");
+        hit.setReason("运行期间内存使用率持续偏高，说明缓存膨胀、对象堆积或资源释放不及时的风险正在累积。");
+        hit.setEvidence(String.format(
+                "avgMemory=%s%%, peakMemory=%s%%, highMemorySeconds=%s",
+                avgMemory.stripTrailingZeros().toPlainString(),
+                peakMemory.stripTrailingZeros().toPlainString(),
+                highMemorySeconds
+        ));
+        hit.setPriority("P1");
+        hit.setSuggestionTitle("优先排查堆占用与缓存增长");
+        hit.setSuggestionDetail("建议结合 GC 日志、堆快照和缓存命中情况检查对象滞留、批量加载或缓存未命中导致的内存压力。");
+        return hit;
+    }
+
     private RuleHit buildThroughputRegressionHit(AnalysisSnapshot snapshot) {
         BigDecimal currentQps = safe(snapshot.getSummary().getAvgQps());
         BigDecimal baselineQps = safe(snapshot.getBaseline().getBaselineQps());
@@ -196,6 +276,8 @@ public class RuleEngine {
             switch (hit.getCode()) {
                 case "HIGH_LATENCY" -> score -= 12;
                 case "ERROR_SPIKE" -> score -= 18;
+                case "CPU_PRESSURE" -> score -= 8;
+                case "MEMORY_PRESSURE" -> score -= 8;
                 case "THROUGHPUT_REGRESSION" -> score -= 10;
                 default -> {
                 }
@@ -213,7 +295,7 @@ public class RuleEngine {
         }
 
         if (hits.isEmpty()) {
-            result.setSummary("本次压测整体表现稳定，未发现明显的高延迟、错误率突增或吞吐退化风险。");
+            result.setSummary("本次压测整体表现稳定，未发现明显的高延迟、错误率突增、资源压力或吞吐退化风险。");
             return;
         }
 
@@ -247,7 +329,7 @@ public class RuleEngine {
         return switch (hit.getCode()) {
             case "FAILED_RUN" -> "运行结束";
             case "THROUGHPUT_REGRESSION" -> "基线对比";
-            case "HIGH_LATENCY", "ERROR_SPIKE" -> "运行摘要";
+            case "HIGH_LATENCY", "ERROR_SPIKE", "CPU_PRESSURE", "MEMORY_PRESSURE" -> "运行摘要";
             default -> snapshot.getContext() != null && snapshot.getContext().getStartTime() != null
                     ? snapshot.getContext().getStartTime().toLocalTime().toString()
                     : "分析结果";

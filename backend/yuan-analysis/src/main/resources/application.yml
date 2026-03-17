@@ -23,7 +23,25 @@ spring:
     username: consumer
     password: 123456
     virtual-host: test_monitor
+  thymeleaf:
+    cache: false
+  ai:
+    openai:
+      api-key: ${ARK_API_KEY}
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      chat:
+        completions-path: /chat/completions
+        options:
+          model: ep-20260317211854-4lghj
+          temperature: 0.3
+          reasoning-effort: high
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
+yuan:
+  analysis:
+    ai:
+      enabled: true
+      max-score-adjustment: 6
+      provider: seed2.0-lite

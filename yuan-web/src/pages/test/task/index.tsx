@@ -1,6 +1,6 @@
-import { PauseCircleOutlined, PlayCircleOutlined, WifiOutlined } from "@ant-design/icons";
+import { PauseCircleOutlined, PlayCircleOutlined, ReloadOutlined, WifiOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Row, Space, Statistic, Table, Tag, Typography, message } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSystemMetricsApi } from "../../../api/monitor";
 import { listTasksApi, startTaskApi, stopTaskApi } from "../../../api/test";
@@ -11,12 +11,14 @@ import RealtimeMetricsPanel from "../../../components/RealtimeMetricsPanel";
 import { useWebSocket } from "../../../hooks/useWebSocket";
 import { useAppStore } from "../../../store/appStore";
 import type { SystemMetric } from "../../../types/monitor";
-import type { TestTask } from "../../../types/test";
+import type { TaskStatusPushMessage, TestTask } from "../../../types/test";
 import { formatDateTime, formatPercent } from "../../../utils/format";
+import { getRequestErrorMessage } from "../../../utils/request";
 import { resolveActiveTaskId } from "../../../utils/taskSelection";
 
 function TestTaskPage() {
   const [tasks, setTasks] = useState<TestTask[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
   const [sysMetric, setSysMetric] = useState<SystemMetric>({
     cpu: 0,
     memory: 0,
@@ -27,43 +29,83 @@ function TestTaskPage() {
   const { activeTaskId, setActiveTaskId } = useAppStore();
   const activeTask = tasks.find((item) => item.id === activeTaskId) || tasks[0];
   const realtimeResetKey = `${activeTaskId}-${activeTask?.startTime ?? "idle"}`;
-  const { transport, series } = useWebSocket(activeTaskId, realtimeResetKey);
+  const previousTransportRef = useRef<"websocket" | "polling" | "disconnected">("disconnected");
   const { t } = useTranslation();
 
-  const loadTasks = useCallback(async () => {
-    const resp = await listTasksApi();
-    setTasks(resp);
-    const resolvedTaskId = resolveActiveTaskId(resp, activeTaskId);
-    if (resolvedTaskId && resolvedTaskId !== activeTaskId) {
-      setActiveTaskId(resolvedTaskId);
-    }
-  }, [activeTaskId, setActiveTaskId]);
-
-  useEffect(() => {
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const pollTasks = async () => {
+  const loadTasks = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setTasksLoading(true);
+      }
       try {
-        await loadTasks();
-      } catch {
-        // Keep the last successful task snapshot to avoid flicker on transient failures.
+        const resp = await listTasksApi();
+        setTasks(resp);
+        const resolvedTaskId = resolveActiveTaskId(resp, activeTaskId);
+        if (resolvedTaskId && resolvedTaskId !== activeTaskId) {
+          setActiveTaskId(resolvedTaskId);
+        }
+      } catch (error) {
+        if (!silent) {
+          message.error(getRequestErrorMessage(error, t("common.loadFailed")));
+        }
       } finally {
-        if (!disposed) {
-          timer = setTimeout(pollTasks, 3000);
+        if (!silent) {
+          setTasksLoading(false);
         }
       }
+    },
+    [activeTaskId, setActiveTaskId, t]
+  );
+
+  const handleTaskStatus = useCallback((statusMessage: TaskStatusPushMessage) => {
+    setTasks((current) =>
+      current.map((task) => {
+        if (task.id !== statusMessage.taskId) {
+          return task;
+        }
+
+        return {
+          ...task,
+          status: statusMessage.status,
+          startTime: statusMessage.status === "RUNNING" && statusMessage.timestamp ? statusMessage.timestamp : task.startTime
+        };
+      })
+    );
+  }, []);
+
+  const { transport, series } = useWebSocket(activeTaskId, realtimeResetKey, handleTaskStatus);
+
+  useEffect(() => {
+    void loadTasks();
+  }, [loadTasks]);
+
+  useEffect(() => {
+    const handleFocusRefresh = () => {
+      void loadTasks(true);
     };
 
-    void pollTasks();
-
-    return () => {
-      disposed = true;
-      if (timer) {
-        clearTimeout(timer);
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === "visible") {
+        void loadTasks(true);
       }
     };
+
+    window.addEventListener("focus", handleFocusRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityRefresh);
+
+    return () => {
+      window.removeEventListener("focus", handleFocusRefresh);
+      document.removeEventListener("visibilitychange", handleVisibilityRefresh);
+    };
   }, [loadTasks]);
+
+  useEffect(() => {
+    const previousTransport = previousTransportRef.current;
+    if (previousTransport === "websocket" && transport !== "websocket") {
+      void loadTasks(true);
+    }
+    previousTransportRef.current = transport;
+  }, [loadTasks, transport]);
 
   useEffect(() => {
     let disposed = false;
@@ -133,6 +175,7 @@ function TestTaskPage() {
                   label={t("testTask.currentTask")}
                   tasks={tasks}
                   value={activeTaskId}
+                  loading={tasksLoading}
                   onChange={setActiveTaskId}
                   width={320}
                 />
@@ -140,6 +183,9 @@ function TestTaskPage() {
                   <Tag color={connectionTagColor} icon={<WifiOutlined />}>
                     {connectionLabel}
                   </Tag>
+                  <Button icon={<ReloadOutlined />} loading={tasksLoading} onClick={() => void loadTasks()}>
+                    {t("common.refresh")}
+                  </Button>
                   <Button
                     type="primary"
                     icon={<PlayCircleOutlined />}
@@ -237,6 +283,7 @@ function TestTaskPage() {
             <Table
               rowKey="id"
               size="small"
+              loading={tasksLoading}
               pagination={false}
               dataSource={tasks}
               onRow={(record) => ({

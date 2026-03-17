@@ -2,6 +2,7 @@ package com.yuan.monitor.websocket;
 
 import cn.hutool.json.JSONUtil;
 import com.yuan.monitor.vo.RealtimeMetricPushVO;
+import com.yuan.monitor.vo.TaskStatusPushVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -34,16 +35,24 @@ public class MonitorSessionManager {
         }
     }
 
-    public void broadcast(Long taskId, RealtimeMetricPushVO payload) {
+    public void broadcastMetric(Long taskId, RealtimeMetricPushVO payload) {
+        broadcast(taskId, payload, payload.getRunId(), "realtime metric");
+    }
+
+    public void broadcastTaskStatus(Long taskId, TaskStatusPushVO payload) {
+        broadcast(taskId, payload, payload.getRunId(), "task status");
+    }
+
+    private void broadcast(Long taskId, Object payload, Long runId, String payloadType) {
         CopyOnWriteArraySet<WebSocketSession> sessionSet = sessions.get(taskId);
         if (sessionSet == null || sessionSet.isEmpty()) {
-            log.debug("Skip websocket broadcast because no subscribers, taskId={}, runId={}", taskId, payload.getRunId());
+            log.debug("Skip websocket broadcast because no subscribers, taskId={}, runId={}, payloadType={}", taskId, runId, payloadType);
             return;
         }
 
         String payloadJson = JSONUtil.toJsonStr(payload);
         TextMessage message = new TextMessage(payloadJson);
-        log.info("Broadcast realtime metric, taskId={}, runId={}, subscribers={}", taskId, payload.getRunId(), sessionSet.size());
+        log.info("Broadcast websocket payload, taskId={}, runId={}, payloadType={}, subscribers={}", taskId, runId, payloadType, sessionSet.size());
 
         for (WebSocketSession session : sessionSet) {
             if (!session.isOpen()) {
@@ -53,7 +62,7 @@ public class MonitorSessionManager {
             try {
                 session.sendMessage(message);
             } catch (Exception e) {
-                log.error("Failed to send websocket message, taskId={}, runId={}, sessionId={}", taskId, payload.getRunId(), session.getId(), e);
+                log.error("Failed to send websocket message, taskId={}, runId={}, payloadType={}, sessionId={}", taskId, runId, payloadType, session.getId(), e);
                 removeSession(taskId, session);
 
                 try {

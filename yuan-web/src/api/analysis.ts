@@ -1,9 +1,28 @@
-import { analysisRules } from "../mock/data";
-import type { AnalysisReport, AnalysisRule } from "../types/analysis";
-import { request, type ApiResponse, withMockDelay } from "../utils/request";
+import type { AnalysisReport, AnalysisRule, AnalysisRulePayload } from "../types/analysis";
+import { request, type ApiResponse } from "../utils/request";
 
-// 规则管理后端还未接通，当前页面继续使用 mock 数据占位。
-export const listRulesApi = async (): Promise<AnalysisRule[]> => withMockDelay(analysisRules, 200);
+export const listRulesApi = async (): Promise<AnalysisRule[]> => {
+  const { data } = await request.get<ApiResponse<AnalysisRule[]>>("/analysis/rules");
+  return data.data;
+};
+
+export const createRuleApi = async (payload: AnalysisRulePayload): Promise<AnalysisRule> => {
+  const { data } = await request.post<ApiResponse<AnalysisRule>>("/analysis/rules", payload);
+  return data.data;
+};
+
+export const updateRuleApi = async (ruleId: number, payload: AnalysisRulePayload): Promise<AnalysisRule> => {
+  const { data } = await request.put<ApiResponse<AnalysisRule>>(`/analysis/rules/${ruleId}`, payload);
+  return data.data;
+};
+
+export const switchRuleApi = async (ruleId: number, enabled: boolean): Promise<void> => {
+  await request.patch<ApiResponse<null>>(`/analysis/rules/${ruleId}/switch`, { enabled });
+};
+
+export const deleteRuleApi = async (ruleId: number): Promise<void> => {
+  await request.delete<ApiResponse<null>>(`/analysis/rules/${ruleId}`);
+};
 
 export const getLatestAnalysisReportApi = async (taskId: number): Promise<AnalysisReport> => {
   const { data } = await request.get<ApiResponse<AnalysisReport>>(`/analysis/reports/tasks/${taskId}/latest`);

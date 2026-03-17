@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 
 @Data
 public class RealtimeMetricPushVO {
+    private String messageType;
     private Long taskId;
     private Long runId;
     private BigDecimal qps;

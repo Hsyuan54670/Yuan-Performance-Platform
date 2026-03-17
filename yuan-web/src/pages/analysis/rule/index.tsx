@@ -1,80 +1,289 @@
-import { PlusOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Switch, Table, Tag, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  Button,
+  Card,
+  Col,
+  Drawer,
+  Empty,
+  Form,
+  Input,
+  Popconfirm,
+  Row,
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tag,
+  Typography,
+  message
+} from "antd";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { listRulesApi } from "../../../api/analysis";
-import type { AnalysisRule } from "../../../types/analysis";
+import { createRuleApi, deleteRuleApi, listRulesApi, switchRuleApi, updateRuleApi } from "../../../api/analysis";
+import type { AnalysisRule, AnalysisRulePayload, AnalysisRulePriority, AnalysisRuleSeverity, AnalysisRuleType } from "../../../types/analysis";
+import { getRequestErrorMessage } from "../../../utils/request";
+
+const severityOptions: AnalysisRuleSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const priorityOptions: AnalysisRulePriority[] = ["P0", "P1", "P2"];
+const engineTypeOptions = ["HIGH_LATENCY", "ERROR_RATE", "THROUGHPUT", "STABILITY"];
+const aiTypeOptions = ["ROOT_CAUSE", "OPTIMIZATION", "CAPACITY", "STABILITY"];
 
 function AnalysisRulePage() {
   const [rules, setRules] = useState<AnalysisRule[]>([]);
-  const [open, setOpen] = useState(false);
-  const [form] = Form.useForm<AnalysisRule>();
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<AnalysisRule | null>(null);
+  const [form] = Form.useForm<AnalysisRulePayload>();
   const { t } = useTranslation();
+  const currentRuleType = Form.useWatch("ruleType", form) as AnalysisRuleType | undefined;
+
+  const engineRules = useMemo(() => rules.filter((rule) => rule.ruleType === "ENGINE"), [rules]);
+  const aiRules = useMemo(() => rules.filter((rule) => rule.ruleType === "AI"), [rules]);
+
+  const loadRules = async () => {
+    setLoading(true);
+    try {
+      setRules(await listRulesApi());
+    } catch (error) {
+      message.error(getRequestErrorMessage(error, t("common.loadFailed")));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    listRulesApi().then(setRules);
+    void loadRules();
   }, []);
 
-  const onSave = async () => {
-    const values = await form.validateFields();
-    setRules((prev) => [...prev, { ...values, id: Date.now() }]);
-    setOpen(false);
+  const openCreateDrawer = (ruleType: AnalysisRuleType) => {
+    setEditingRule(null);
+    form.setFieldsValue({
+      ruleType,
+      name: "",
+      expression: "",
+      instruction: "",
+      bottleneckType: ruleType === "ENGINE" ? "HIGH_LATENCY" : "ROOT_CAUSE",
+      severity: ruleType === "ENGINE" ? "HIGH" : "MEDIUM",
+      priority: "P1",
+      enabled: true
+    });
+    setDrawerOpen(true);
+  };
+
+  const openEditDrawer = (rule: AnalysisRule) => {
+    setEditingRule(rule);
+    form.setFieldsValue({
+      ruleType: rule.ruleType,
+      name: rule.name,
+      expression: rule.expression,
+      instruction: rule.instruction,
+      bottleneckType: rule.bottleneckType,
+      severity: rule.severity,
+      priority: rule.priority,
+      enabled: rule.enabled
+    });
+    setDrawerOpen(true);
+  };
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setEditingRule(null);
     form.resetFields();
   };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      setSubmitting(true);
+      if (editingRule) {
+        await updateRuleApi(editingRule.id, values);
+        message.success(t("analysisRule.updateSuccess"));
+      } else {
+        await createRuleApi(values);
+        message.success(t("analysisRule.createSuccess"));
+      }
+      closeDrawer();
+      await loadRules();
+    } catch (error) {
+      if (error instanceof Error && error.message) {
+        message.error(getRequestErrorMessage(error, t("common.saveFailed")));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSwitch = async (rule: AnalysisRule, enabled: boolean) => {
+    try {
+      await switchRuleApi(rule.id, enabled);
+      setRules((current) => current.map((item) => (item.id === rule.id ? { ...item, enabled } : item)));
+      message.success(t("analysisRule.switchSuccess"));
+    } catch (error) {
+      message.error(getRequestErrorMessage(error, t("common.saveFailed")));
+    }
+  };
+
+  const handleDelete = async (ruleId: number) => {
+    try {
+      await deleteRuleApi(ruleId);
+      setRules((current) => current.filter((item) => item.id !== ruleId));
+      message.success(t("analysisRule.deleteSuccess"));
+    } catch (error) {
+      message.error(getRequestErrorMessage(error, t("common.deleteFailed")));
+    }
+  };
+
+  const renderSeverityTag = (value: string) => (
+    <Tag color={value === "CRITICAL" ? "red" : value === "HIGH" ? "orange" : value === "MEDIUM" ? "blue" : "green"}>{value}</Tag>
+  );
+
+  const renderPriorityTag = (value: string) => (
+    <Tag color={value === "P0" ? "red" : value === "P1" ? "orange" : "blue"}>{value}</Tag>
+  );
+
+  const renderActionColumn = (_: unknown, record: AnalysisRule) => (
+    <Space size="small">
+      <Button type="link" icon={<EditOutlined />} onClick={() => openEditDrawer(record)}>
+        {t("analysisRule.editRule")}
+      </Button>
+      <Popconfirm
+        title={t("analysisRule.deleteConfirm")}
+        okText={t("analysisRule.confirmDelete")}
+        cancelText={t("analysisRule.cancel")}
+        onConfirm={() => void handleDelete(record.id)}
+      >
+        <Button type="link" danger icon={<DeleteOutlined />}>
+          {t("analysisRule.deleteRule")}
+        </Button>
+      </Popconfirm>
+    </Space>
+  );
 
   return (
     <div className="page-shell">
       <Row gutter={[16, 16]}>
         <Col span={24}>
           <Card className="glass-card" style={{ borderRadius: 18 }}>
-            <Space style={{ width: "100%", justifyContent: "space-between" }}>
+            <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
               <div>
                 <Typography.Title level={3} style={{ margin: 0 }}>{t("analysisRule.title")}</Typography.Title>
                 <Typography.Text type="secondary">{t("analysisRule.subtitle")}</Typography.Text>
               </div>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>
-                {t("analysisRule.addRule")}
-              </Button>
+              <Space wrap>
+                <Button icon={<PlusOutlined />} onClick={() => openCreateDrawer("ENGINE")}>
+                  {t("analysisRule.addEngineRule")}
+                </Button>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreateDrawer("AI")}>
+                  {t("analysisRule.addAiRule")}
+                </Button>
+              </Space>
             </Space>
           </Card>
         </Col>
 
-        <Col span={24}>
-          <Card className="glass-card" style={{ borderRadius: 18 }}>
+        <Col xs={24} lg={12}>
+          <Card
+            className="glass-card"
+            title={t("analysisRule.engineRulesTitle")}
+            extra={<Tag color="blue">{t("analysisRule.engineRulesCount", { count: engineRules.length })}</Tag>}
+            style={{ borderRadius: 18 }}
+          >
             <Table
               rowKey="id"
-              dataSource={rules}
+              loading={loading}
+              dataSource={engineRules}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("common.noData")} /> }}
+              pagination={{ pageSize: 6 }}
               columns={[
                 { title: t("analysisRule.colName"), dataIndex: "name" },
                 { title: t("analysisRule.colExpression"), dataIndex: "expression", ellipsis: true },
-                { title: t("analysisRule.colType"), dataIndex: "bottleneckType", render: (v: string) => <Tag>{v}</Tag> },
-                { title: t("analysisRule.colSeverity"), dataIndex: "severity", render: (v: string) => <Tag color={v === "HIGH" ? "orange" : "blue"}>{v}</Tag> },
-                { title: t("analysisRule.colEnabled"), dataIndex: "enabled", render: (v: boolean) => <Switch checked={v} size="small" /> }
+                { title: t("analysisRule.colType"), dataIndex: "bottleneckType", render: (value: string) => <Tag>{value}</Tag> },
+                { title: t("analysisRule.colSeverity"), dataIndex: "severity", render: (value: string) => renderSeverityTag(value) },
+                { title: t("analysisRule.colPriority"), dataIndex: "priority", render: (value: string) => renderPriorityTag(value) },
+                {
+                  title: t("analysisRule.colEnabled"),
+                  dataIndex: "enabled",
+                  render: (value: boolean, record: AnalysisRule) => <Switch checked={value} onChange={(checked) => void handleSwitch(record, checked)} />
+                },
+                { title: t("analysisRule.colAction"), key: "action", render: renderActionColumn }
+              ]}
+            />
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={12}>
+          <Card
+            className="glass-card"
+            title={t("analysisRule.aiRulesTitle")}
+            extra={<Tag color="purple">{t("analysisRule.aiRulesCount", { count: aiRules.length })}</Tag>}
+            style={{ borderRadius: 18 }}
+          >
+            <Table
+              rowKey="id"
+              loading={loading}
+              dataSource={aiRules}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("common.noData")} /> }}
+              pagination={{ pageSize: 6 }}
+              columns={[
+                { title: t("analysisRule.colName"), dataIndex: "name" },
+                { title: t("analysisRule.colInstruction"), dataIndex: "instruction", ellipsis: true },
+                { title: t("analysisRule.colType"), dataIndex: "bottleneckType", render: (value: string) => <Tag>{value}</Tag> },
+                { title: t("analysisRule.colSeverity"), dataIndex: "severity", render: (value: string) => renderSeverityTag(value) },
+                { title: t("analysisRule.colPriority"), dataIndex: "priority", render: (value: string) => renderPriorityTag(value) },
+                {
+                  title: t("analysisRule.colEnabled"),
+                  dataIndex: "enabled",
+                  render: (value: boolean, record: AnalysisRule) => <Switch checked={value} onChange={(checked) => void handleSwitch(record, checked)} />
+                },
+                { title: t("analysisRule.colAction"), key: "action", render: renderActionColumn }
               ]}
             />
           </Card>
         </Col>
       </Row>
 
-      <Modal title={t("analysisRule.modalTitle")} open={open} onOk={onSave} onCancel={() => setOpen(false)}>
-        <Form layout="vertical" form={form} initialValues={{ enabled: true, severity: "HIGH" }}>
-          <Form.Item name="name" label={t("analysisRule.fieldRuleName")} rules={[{ required: true }]}>
+      <Drawer
+        title={editingRule ? t("analysisRule.editDrawerTitle") : currentRuleType === "AI" ? t("analysisRule.createAiRule") : t("analysisRule.createEngineRule")}
+        open={drawerOpen}
+        onClose={closeDrawer}
+        destroyOnHidden
+        extra={
+          <Button type="primary" loading={submitting} onClick={() => void handleSubmit()}>
+            {editingRule ? t("analysisRule.saveChanges") : t("common.save")}
+          </Button>
+        }
+      >
+        <Form layout="vertical" form={form} initialValues={{ ruleType: "ENGINE", enabled: true, severity: "HIGH", priority: "P1" }}>
+          <Form.Item name="ruleType" label={t("analysisRule.fieldRuleType")} rules={[{ required: true }]}>
+            <Select options={[{ label: t("analysisRule.ruleTypeEngine"), value: "ENGINE" }, { label: t("analysisRule.ruleTypeAi"), value: "AI" }]} />
+          </Form.Item>
+          <Form.Item name="name" label={t("analysisRule.fieldRuleName")} rules={[{ required: true, message: t("analysisRule.nameRequired") }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="expression" label={t("analysisRule.fieldExpression")} rules={[{ required: true }]}>
-            <Input.TextArea rows={4} placeholder="avg_cpu_usage > 80 and p99_response_time > 2000" />
-          </Form.Item>
+          {currentRuleType === "AI" ? (
+            <Form.Item name="instruction" label={t("analysisRule.fieldInstruction")} rules={[{ required: true, message: t("analysisRule.instructionRequired") }]}>
+              <Input.TextArea rows={5} placeholder={t("analysisRule.instructionPlaceholder")} />
+            </Form.Item>
+          ) : (
+            <Form.Item name="expression" label={t("analysisRule.fieldExpression")} rules={[{ required: true, message: t("analysisRule.expressionRequired") }]}>
+              <Input.TextArea rows={4} placeholder="summary.p99 > 2000 && feature.highLatencySeconds >= 3" />
+            </Form.Item>
+          )}
           <Form.Item name="bottleneckType" label={t("analysisRule.fieldBottleneckType")} rules={[{ required: true }]}>
-            <Input />
+            <Select options={(currentRuleType === "AI" ? aiTypeOptions : engineTypeOptions).map((value) => ({ label: value, value }))} />
           </Form.Item>
-          <Form.Item name="severity" label={t("analysisRule.fieldSeverity")}>
-            <Select options={["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((v) => ({ label: v, value: v }))} />
+          <Form.Item name="severity" label={t("analysisRule.fieldSeverity")} rules={[{ required: true }]}>
+            <Select options={severityOptions.map((value) => ({ label: value, value }))} />
+          </Form.Item>
+          <Form.Item name="priority" label={t("analysisRule.fieldPriority")} rules={[{ required: true }]}>
+            <Select options={priorityOptions.map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item name="enabled" label={t("analysisRule.fieldEnabled")} valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>
-      </Modal>
+      </Drawer>
     </div>
   );
 }

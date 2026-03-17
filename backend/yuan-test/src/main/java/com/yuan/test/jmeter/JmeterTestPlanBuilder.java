@@ -3,6 +3,7 @@ package com.yuan.test.jmeter;
 import com.yuan.test.entity.TestScene;
 import com.yuan.test.entity.TestSceneStep;
 import com.yuan.test.entity.TestTask;
+import com.yuan.test.entity.TestTaskRun;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.config.ConfigTestElement;
@@ -44,7 +45,7 @@ public class JmeterTestPlanBuilder {
      * 核心方法：构建完整的 JMeter HashTree（JMeter的执行树结构）
      * @return 可直接运行的 HashTree
      */
-    public ListedHashTree build(com.yuan.test.entity.TestPlan plan , TestScene scene , TestTask task, List<TestSceneStep> steps, ResultCollector resultCollector) throws Exception {
+    public ListedHashTree build(com.yuan.test.entity.TestPlan plan , TestScene scene , TestTask task, List<TestSceneStep> steps, ResultCollector resultCollector, TestTaskRun taskRun) throws Exception {
         // ====================== 0. 初始化 JMeter 环境（必须第一步做！） ======================
         jmeterInitializer.initializeJmeterEngine();
 
@@ -95,7 +96,7 @@ public class JmeterTestPlanBuilder {
 
         // ====================== 5. 创建监听器（Listener：收集结果） ======================
         resultCollector.setName("汇总报告");
-        resultCollector.setFilename(Paths.get(jmeterConfig.getResultsDir(), "task_"+task.getId()+".jtl").toString());
+        resultCollector.setFilename(Paths.get(jmeterConfig.getResultsDir(), "run_"+taskRun.getId()+".jtl").toString());
 
         // ====================== 6. 组装 HashTree（核心：构建层级结构） ======================
         // JMeter 的执行是基于 HashTree 的层级结构，顺序为：TestPlan → ThreadGroup → 子元素

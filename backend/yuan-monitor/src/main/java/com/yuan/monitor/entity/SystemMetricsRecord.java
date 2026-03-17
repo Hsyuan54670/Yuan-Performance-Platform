@@ -19,6 +19,9 @@ public class SystemMetricsRecord {
     @TableField("task_id")
     private Long taskId;
 
+    @TableField("run_id")
+    private Long runId;
+
     @TableField("ts")
     private LocalDateTime ts;
 

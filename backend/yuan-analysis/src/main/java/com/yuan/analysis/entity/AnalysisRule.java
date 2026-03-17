@@ -17,17 +17,26 @@ public class AnalysisRule {
     @TableField("user_id")
     private Long userId;
 
+    @TableField("rule_type")
+    private String ruleType;
+
     @TableField("name")
     private String name;
 
     @TableField("expression")
     private String expression;
 
+    @TableField("instruction")
+    private String instruction;
+
     @TableField("bottleneck_type")
     private String bottleneckType;
 
     @TableField("severity")
     private String severity;
+
+    @TableField("priority")
+    private String priority;
 
     @TableField("enabled")
     private Boolean enabled;

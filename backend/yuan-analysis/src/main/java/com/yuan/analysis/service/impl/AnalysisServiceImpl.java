@@ -1,6 +1,7 @@
 package com.yuan.analysis.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.yuan.analysis.ai.service.AiAnalysisEnhancer;
 import com.yuan.analysis.collector.AnalysisDataCollector;
 import com.yuan.analysis.entity.AnalysisReport;
 import com.yuan.analysis.entity.AnalysisSuggestion;
@@ -10,6 +11,7 @@ import com.yuan.analysis.mapper.AnalysisSuggestionMapper;
 import com.yuan.analysis.mapper.BottleneckRecordMapper;
 import com.yuan.analysis.model.AnalysisComputationResult;
 import com.yuan.analysis.model.AnalysisSnapshot;
+import com.yuan.analysis.report.AnalysisReportHtmlRenderer;
 import com.yuan.analysis.rule.RuleEngine;
 import com.yuan.analysis.service.AnalysisService;
 import com.yuan.analysis.vo.AnalysisResultVO;
@@ -17,25 +19,40 @@ import com.yuan.api.test.mq.TestCompletedMessage;
 import com.yuan.common.constant.HttpStatus;
 import com.yuan.common.result.R;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 @Slf4j
 @Service
-// 作为分析主链的编排层：收消息、采快照、跑规则、再把结果落到主表和子表。
 public class AnalysisServiceImpl implements AnalysisService {
 
-    @Autowired
-    private AnalysisReportMapper arMapper;
-    @Autowired
-    private RuleEngine ruleEngine;
-    @Autowired
-    private BottleneckRecordMapper brMapper;
-    @Autowired
-    private AnalysisSuggestionMapper asMapper;
-    @Autowired
-    private AnalysisDataCollector analysisDataCollector;
+    private final AnalysisReportMapper analysisReportMapper;
+    private final RuleEngine ruleEngine;
+    private final BottleneckRecordMapper bottleneckRecordMapper;
+    private final AnalysisSuggestionMapper analysisSuggestionMapper;
+    private final AnalysisDataCollector analysisDataCollector;
+    private final AiAnalysisEnhancer aiAnalysisEnhancer;
+    private final AnalysisReportHtmlRenderer analysisReportHtmlRenderer;
+
+    public AnalysisServiceImpl(
+            AnalysisReportMapper analysisReportMapper,
+            RuleEngine ruleEngine,
+            BottleneckRecordMapper bottleneckRecordMapper,
+            AnalysisSuggestionMapper analysisSuggestionMapper,
+            AnalysisDataCollector analysisDataCollector,
+            AiAnalysisEnhancer aiAnalysisEnhancer,
+            AnalysisReportHtmlRenderer analysisReportHtmlRenderer
+    ) {
+        this.analysisReportMapper = analysisReportMapper;
+        this.ruleEngine = ruleEngine;
+        this.bottleneckRecordMapper = bottleneckRecordMapper;
+        this.analysisSuggestionMapper = analysisSuggestionMapper;
+        this.analysisDataCollector = analysisDataCollector;
+        this.aiAnalysisEnhancer = aiAnalysisEnhancer;
+        this.analysisReportHtmlRenderer = analysisReportHtmlRenderer;
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -51,19 +68,15 @@ public class AnalysisServiceImpl implements AnalysisService {
 
         try {
             AnalysisReport report = getOrCreateReport(userId, taskId, runId);
-
-            // 采集器负责把 run 维度的数据拼成统一快照，service 这里只负责编排。
             AnalysisSnapshot snapshot = analysisDataCollector.collectSnapshot(
                     userId,
                     taskId,
                     runId,
                     message.getStatus()
             );
-
-            // 规则引擎只消费快照，不直接依赖 MQ 消息或外部服务。
             AnalysisComputationResult result = ruleEngine.analyze(snapshot);
+            result = aiAnalysisEnhancer.enhance(userId, snapshot, result);
 
-            // 主表与子表必须一起成功或一起回滚，避免产生半成品分析报告。
             fillReport(report, snapshot, result);
             saveReport(report);
             rebuildChildren(report.getId(), result);
@@ -75,12 +88,7 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     @Override
     public R<AnalysisResultVO> getReportByRunId(Long userId, Long runId) {
-        LambdaQueryWrapper<AnalysisReport> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(AnalysisReport::getUserId, userId)
-                .eq(AnalysisReport::getRunId, runId)
-                .last("limit 1");
-
-        AnalysisReport report = arMapper.selectOne(wrapper);
+        AnalysisReport report = findReportByRunId(userId, runId);
         if (report == null) {
             return R.fail(HttpStatus.NOT_FOUND, "Report not found");
         }
@@ -89,27 +97,50 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     @Override
     public R<AnalysisResultVO> getLatestReportByTaskId(Long userId, Long taskId) {
-        LambdaQueryWrapper<AnalysisReport> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(AnalysisReport::getUserId, userId)
-                .eq(AnalysisReport::getTaskId, taskId)
-                .orderByDesc(AnalysisReport::getCreatedAt)
-                .last("limit 1");
-
-        AnalysisReport report = arMapper.selectOne(wrapper);
+        AnalysisReport report = findLatestReportByTaskId(userId, taskId);
         if (report == null) {
             return R.fail(HttpStatus.NOT_FOUND, "Report not found");
         }
         return R.success(toResultVO(report));
     }
 
-    // 同一个 run 只维护一份分析报告，重复消费时走更新路径而不是重复插入。
-    private AnalysisReport getOrCreateReport(Long userId, Long taskId, Long runId) {
+    @Override
+    public String getReportHtmlByRunId(Long userId, Long runId) {
+        AnalysisReport report = findReportByRunId(userId, runId);
+        if (report == null) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Report not found");
+        }
+        return analysisReportHtmlRenderer.render(toResultVO(report));
+    }
+
+    @Override
+    public String getLatestReportHtmlByTaskId(Long userId, Long taskId) {
+        AnalysisReport report = findLatestReportByTaskId(userId, taskId);
+        if (report == null) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Report not found");
+        }
+        return analysisReportHtmlRenderer.render(toResultVO(report));
+    }
+
+    private AnalysisReport findReportByRunId(Long userId, Long runId) {
         LambdaQueryWrapper<AnalysisReport> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AnalysisReport::getUserId, userId)
                 .eq(AnalysisReport::getRunId, runId)
                 .last("limit 1");
+        return analysisReportMapper.selectOne(wrapper);
+    }
 
-        AnalysisReport report = arMapper.selectOne(wrapper);
+    private AnalysisReport findLatestReportByTaskId(Long userId, Long taskId) {
+        LambdaQueryWrapper<AnalysisReport> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AnalysisReport::getUserId, userId)
+                .eq(AnalysisReport::getTaskId, taskId)
+                .orderByDesc(AnalysisReport::getCreatedAt)
+                .last("limit 1");
+        return analysisReportMapper.selectOne(wrapper);
+    }
+
+    private AnalysisReport getOrCreateReport(Long userId, Long taskId, Long runId) {
+        AnalysisReport report = findReportByRunId(userId, runId);
         if (report != null) {
             return report;
         }
@@ -121,51 +152,46 @@ public class AnalysisServiceImpl implements AnalysisService {
         return created;
     }
 
-    // 主表保存的是摘要结果，真正的规则明细和建议存放在子表中。
     private void fillReport(AnalysisReport report, AnalysisSnapshot snapshot, AnalysisComputationResult result) {
         report.setStatus(snapshot.getFinalStatus());
-        report.setSource("DATA_RULE");
+        report.setSource(StringUtils.hasText(result.getSource()) ? result.getSource() : "DATA_RULE");
         report.setGrade(result.getGrade());
         report.setScore(result.getScore());
         report.setSummary(result.getSummary());
     }
 
-    // insert 和 update 统一在这里收口，避免主流程分叉过多。
     private void saveReport(AnalysisReport report) {
         if (report.getId() == null) {
-            arMapper.insert(report);
+            analysisReportMapper.insert(report);
             return;
         }
-        arMapper.updateById(report);
+        analysisReportMapper.updateById(report);
     }
 
-    // 子表采用重建策略，确保重跑分析后不会残留旧的瓶颈和建议。
     private void rebuildChildren(Long reportId, AnalysisComputationResult result) {
         deleteChildren(reportId);
 
         for (BottleneckRecord bottleneck : result.getBottlenecks()) {
             bottleneck.setReportId(reportId);
-            brMapper.insert(bottleneck);
+            bottleneckRecordMapper.insert(bottleneck);
         }
 
         for (AnalysisSuggestion suggestion : result.getSuggestions()) {
             suggestion.setReportId(reportId);
-            asMapper.insert(suggestion);
+            analysisSuggestionMapper.insert(suggestion);
         }
     }
 
-    // 先清旧数据，再按本次规则结果重建，逻辑更简单也更不容易产生脏数据。
     private void deleteChildren(Long reportId) {
         LambdaQueryWrapper<BottleneckRecord> bottleneckWrapper = new LambdaQueryWrapper<>();
         bottleneckWrapper.eq(BottleneckRecord::getReportId, reportId);
-        brMapper.delete(bottleneckWrapper);
+        bottleneckRecordMapper.delete(bottleneckWrapper);
 
         LambdaQueryWrapper<AnalysisSuggestion> suggestionWrapper = new LambdaQueryWrapper<>();
         suggestionWrapper.eq(AnalysisSuggestion::getReportId, reportId);
-        asMapper.delete(suggestionWrapper);
+        analysisSuggestionMapper.delete(suggestionWrapper);
     }
 
-    // 查询接口统一在这里把主表与子表重新组装成前端可直接消费的 VO。
     private AnalysisResultVO toResultVO(AnalysisReport report) {
         AnalysisResultVO vo = new AnalysisResultVO();
         vo.setTaskId(report.getTaskId());
@@ -179,7 +205,7 @@ public class AnalysisServiceImpl implements AnalysisService {
 
         LambdaQueryWrapper<AnalysisSuggestion> suggestionWrapper = new LambdaQueryWrapper<>();
         suggestionWrapper.eq(AnalysisSuggestion::getReportId, report.getId());
-        asMapper.selectList(suggestionWrapper).forEach(suggestion -> {
+        analysisSuggestionMapper.selectList(suggestionWrapper).forEach(suggestion -> {
             AnalysisResultVO.SuggestionItemVO item = new AnalysisResultVO.SuggestionItemVO();
             item.setId(suggestion.getId());
             item.setPriority(suggestion.getPriority());
@@ -190,7 +216,7 @@ public class AnalysisServiceImpl implements AnalysisService {
 
         LambdaQueryWrapper<BottleneckRecord> bottleneckWrapper = new LambdaQueryWrapper<>();
         bottleneckWrapper.eq(BottleneckRecord::getReportId, report.getId());
-        brMapper.selectList(bottleneckWrapper).forEach(bottleneck -> {
+        bottleneckRecordMapper.selectList(bottleneckWrapper).forEach(bottleneck -> {
             AnalysisResultVO.BottleneckItemVO item = new AnalysisResultVO.BottleneckItemVO();
             item.setType(bottleneck.getType());
             item.setReason(bottleneck.getReason());

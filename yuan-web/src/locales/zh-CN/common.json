@@ -5,6 +5,7 @@
   "common": {
     "loading": "加载中...",
     "loadingModule": "模块加载中...",
+    "refresh": "刷新",
     "save": "保存",
     "saveFailed": "保存失败，请稍后重试",
     "deleteFailed": "删除失败，请稍后重试",
@@ -223,8 +224,8 @@
     "noReport": "当前任务暂无分析报告"
   },
   "analysisRule": {
-    "title": "分析规则引擎",
-    "subtitle": "维护瓶颈识别规则，作为 LLM 深度分析前置输入。",
+    "title": "分析规则中心",
+    "subtitle": "将可执行规则与 AI 分析规则分层管理，兼顾稳定判定和解释增强。",
     "addRule": "新增规则",
     "colName": "名称",
     "colExpression": "表达式",
@@ -236,7 +237,38 @@
     "fieldExpression": "表达式",
     "fieldBottleneckType": "瓶颈类型",
     "fieldSeverity": "严重度",
-    "fieldEnabled": "启用"
+    "fieldEnabled": "启用",
+    "addEngineRule": "新增规则引擎规则",
+    "addAiRule": "新增 AI 规则",
+    "engineRulesTitle": "规则引擎卡片",
+    "aiRulesTitle": "AI 规则卡片",
+    "engineRulesCount": "引擎规则 {{count}} 条",
+    "aiRulesCount": "AI 规则 {{count}} 条",
+    "colInstruction": "AI 指令",
+    "colPriority": "优先级",
+    "colAction": "操作",
+    "editRule": "编辑",
+    "deleteRule": "删除",
+    "deleteConfirm": "确定删除这条分析规则吗？",
+    "confirmDelete": "确认删除",
+    "cancel": "取消",
+    "createSuccess": "分析规则创建成功",
+    "updateSuccess": "分析规则更新成功",
+    "switchSuccess": "规则状态已更新",
+    "deleteSuccess": "分析规则已删除",
+    "editDrawerTitle": "编辑分析规则",
+    "createEngineRule": "创建规则引擎规则",
+    "createAiRule": "创建 AI 规则",
+    "saveChanges": "保存修改",
+    "fieldRuleType": "规则类型",
+    "fieldInstruction": "AI 分析指令",
+    "fieldPriority": "优先级",
+    "ruleTypeEngine": "规则引擎规则",
+    "ruleTypeAi": "AI 规则",
+    "nameRequired": "请输入规则名称",
+    "expressionRequired": "请输入规则表达式",
+    "instructionRequired": "请输入 AI 分析指令",
+    "instructionPlaceholder": "例如：当延迟和错误率同时升高时，优先从下游依赖和数据库方向分析根因，并给出排查顺序。"
   },
   "report": {
     "exportSuccess": "报告导出成功",
@@ -306,8 +338,14 @@
       "CONNECTION_POOL": "连接池",
       "HIGH_LATENCY": "高延迟",
       "ERROR_RATE": "错误率",
+      "CPU_PRESSURE": "CPU 压力",
+      "MEMORY_PRESSURE": "内存压力",
       "THROUGHPUT": "吞吐回归",
       "STABILITY": "稳定性"
     }
   }
 }
+
+
+
+

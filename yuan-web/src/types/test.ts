@@ -36,6 +36,15 @@ export interface TestTask {
   errorRate: number;
 }
 
+export interface TaskStatusPushMessage {
+  messageType: "TASK_STATUS";
+  taskId: number;
+  runId?: number | null;
+  status: TaskStatus;
+  message?: string;
+  timestamp?: string;
+}
+
 export interface RealtimeMetricPoint {
   time: string;
   qps: number;

@@ -1,4 +1,7 @@
 export type Grade = "A" | "B" | "C" | "D" | "E";
+export type AnalysisRuleType = "ENGINE" | "AI";
+export type AnalysisRulePriority = "P0" | "P1" | "P2";
+export type AnalysisRuleSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export interface BottleneckItem {
   time: string;
@@ -30,9 +33,25 @@ export interface AnalysisReport {
 
 export interface AnalysisRule {
   id: number;
+  ruleType: AnalysisRuleType;
   name: string;
-  expression: string;
+  expression?: string;
+  instruction?: string;
   bottleneckType: string;
-  severity: string;
+  severity: AnalysisRuleSeverity;
+  priority: AnalysisRulePriority;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AnalysisRulePayload {
+  ruleType: AnalysisRuleType;
+  name: string;
+  expression?: string;
+  instruction?: string;
+  bottleneckType: string;
+  severity: AnalysisRuleSeverity;
+  priority: AnalysisRulePriority;
   enabled: boolean;
 }

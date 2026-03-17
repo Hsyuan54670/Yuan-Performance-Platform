@@ -121,18 +121,22 @@ export const alertRecords: AlertRecord[] = [
 export const analysisRules: AnalysisRule[] = [
   {
     id: 601,
-    name: "CPU bottleneck",
-    expression: "avg_cpu_usage > 80 and p99_response_time > 2000",
-    bottleneckType: "CPU_BOTTLENECK",
+    ruleType: "ENGINE",
+    name: "高延迟风险",
+    expression: "summary.p99 > 2000 && feature.highLatencySeconds >= 3",
+    bottleneckType: "HIGH_LATENCY",
     severity: "HIGH",
+    priority: "P1",
     enabled: true
   },
   {
     id: 602,
-    name: "Connection pool",
-    expression: "active_connections >= max_connections * 0.9 and error_rate > 5",
-    bottleneckType: "CONNECTION_POOL_EXHAUSTION",
-    severity: "HIGH",
+    ruleType: "AI",
+    name: "数据库方向优先解释",
+    instruction: "当延迟和错误率同时升高时，优先从数据库和下游依赖方向分析根因，并给出排查顺序。",
+    bottleneckType: "ROOT_CAUSE",
+    severity: "MEDIUM",
+    priority: "P1",
     enabled: true
   }
 ];
@@ -230,6 +234,7 @@ export const menuTree = [
   { id: 5, name: "Report", path: "/report" },
   { id: 6, name: "System", path: "/system/user" }
 ];
+
 
 
 
