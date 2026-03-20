@@ -6,34 +6,17 @@ import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { logoutApi } from "../api/auth";
 import { useAuth } from "../hooks/useAuth";
-import { appMenus, type MenuItem } from "../router";
+import {
+  appMenus,
+  collectAllowedPaths,
+  filterMenuTreeByAccess,
+  findMenuChain,
+  flattenKeys,
+  resolveFirstAccessiblePath
+} from "../router/app-navigation";
 import { useAppStore } from "../store/appStore";
 
 const { Header, Content, Sider } = Layout;
-
-const flattenKeys = (items: MenuProps["items"]): string[] => {
-  if (!items) return [];
-  return items.flatMap((item) => {
-    if (!item || typeof item === "string") return [];
-    if ("children" in item && item.children?.length) {
-      return [String(item.key), ...flattenKeys(item.children)];
-    }
-    return [String(item.key)];
-  });
-};
-
-const findMenuChain = (source: MenuItem[], path: string): MenuItem[] => {
-  for (const item of source) {
-    if (item.children?.length) {
-      const matchedChild = item.children.find((child) => path.startsWith(child.key));
-      if (matchedChild) return [item, matchedChild];
-    }
-    if (item.key.startsWith("/") && path.startsWith(item.key)) {
-      return [item];
-    }
-  }
-  return [];
-};
 
 function MainLayout() {
   const navigate = useNavigate();
@@ -42,9 +25,24 @@ function MainLayout() {
   const { user, logout } = useAuth();
   const { t, i18n } = useTranslation();
 
-  const menuItems = useMemo<MenuProps["items"]>(
+  const allowedMenuPaths = useMemo(
+    () => (user?.menus?.length ? collectAllowedPaths(user.menus) : undefined),
+    [user?.menus]
+  );
+
+  const visibleMenus = useMemo(
+    () => filterMenuTreeByAccess(appMenus, user?.permissions ?? [], allowedMenuPaths),
+    [allowedMenuPaths, user?.permissions]
+  );
+
+  const firstVisiblePath = useMemo(
+    () => resolveFirstAccessiblePath(user?.permissions ?? [], allowedMenuPaths) ?? "/",
+    [allowedMenuPaths, user?.permissions]
+  );
+
+  const menuItems = useMemo<NonNullable<MenuProps["items"]>>(
     () =>
-      appMenus.map((item) => ({
+      visibleMenus.map((item) => ({
         key: item.key,
         icon: item.icon,
         label: t(item.labelKey),
@@ -54,21 +52,21 @@ function MainLayout() {
           icon: child.icon
         }))
       })),
-    [t]
+    [t, visibleMenus]
   );
 
   const allKeys = useMemo(() => flattenKeys(menuItems), [menuItems]);
 
   const selected = useMemo(() => {
     const matched = allKeys.find((key) => location.pathname.startsWith(key));
-    return matched ? [matched] : ["/dashboard"];
-  }, [location.pathname, allKeys]);
+    return matched ? [matched] : firstVisiblePath && firstVisiblePath !== "/" ? [firstVisiblePath] : [];
+  }, [allKeys, firstVisiblePath, location.pathname]);
 
   const breadcrumbItems = useMemo(() => {
-    const chain = findMenuChain(appMenus, location.pathname);
+    const chain = findMenuChain(visibleMenus, location.pathname);
     if (!chain.length) return [{ title: t("layout.breadcrumbFallback") }];
     return chain.map((item) => ({ title: t(item.labelKey) }));
-  }, [location.pathname, t]);
+  }, [location.pathname, t, visibleMenus]);
 
   const handleLogout = async () => {
     try {
@@ -117,16 +115,24 @@ function MainLayout() {
           {!collapsed ? t("layout.brand") : "YP"}
         </div>
 
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={selected}
-          items={menuItems}
-          onClick={({ key }) => {
-            if (String(key).startsWith("/")) navigate(String(key));
-          }}
-          style={{ background: "transparent", border: 0 }}
-        />
+        {menuItems.length ? (
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={selected}
+            items={menuItems}
+            onClick={({ key }) => {
+              if (String(key).startsWith("/")) {
+                navigate(String(key));
+              }
+            }}
+            style={{ background: "transparent", border: 0 }}
+          />
+        ) : (
+          <div style={{ padding: "12px 16px", color: "rgba(255,255,255,0.75)" }}>
+            <Typography.Text style={{ color: "inherit" }}>{t("layout.noMenus")}</Typography.Text>
+          </div>
+        )}
       </Sider>
 
       <Layout style={{ background: "transparent" }}>
@@ -187,3 +193,4 @@ function MainLayout() {
 }
 
 export default MainLayout;
+

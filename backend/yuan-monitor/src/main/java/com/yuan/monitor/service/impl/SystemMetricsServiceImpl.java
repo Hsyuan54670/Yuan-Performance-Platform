@@ -8,7 +8,6 @@ import com.yuan.monitor.entity.SystemMetricsRecord;
 import com.yuan.monitor.entity.TestStatusRecord;
 import com.yuan.monitor.mapper.SystemMetricsMapper;
 import com.yuan.monitor.mapper.TestStatusRecordMapper;
-import com.yuan.monitor.service.AlertEvaluateService;
 import com.yuan.monitor.service.SystemMetricsService;
 import com.yuan.monitor.vo.RunSystemMetricPointVO;
 import com.yuan.monitor.vo.RunSystemMetricSummaryVO;
@@ -37,18 +36,9 @@ public class SystemMetricsServiceImpl implements SystemMetricsService {
     @Autowired
     TestStatusRecordMapper testStatusRecordMapper;
 
-    @Autowired
-    AlertEvaluateService alertEvaluateService;
-
     @Override
     public R<SystemMetricVO> getSystemMetrics() {
-        SystemMetricVO systemMetricVO = systemMetricsCollector.collectCurrentSystemMetrics();
-        try {
-            alertEvaluateService.evaluateSystemMetric(systemMetricVO);
-        } catch (Exception e) {
-            log.error("Failed to evaluate system metric alerts", e);
-        }
-        return R.success(systemMetricVO);
+        return R.success(systemMetricsCollector.collectCurrentSystemMetrics());
     }
 
     @Override
@@ -65,39 +55,47 @@ public class SystemMetricsServiceImpl implements SystemMetricsService {
             return R.success(summary);
         }
 
-        BigDecimal sumCpu = BigDecimal.ZERO;
-        BigDecimal sumMemory = BigDecimal.ZERO;
-        int highCpuSeconds = 0;
-        int highMemorySeconds = 0;
-        for (SystemMetricsRecord record : records) {
-            BigDecimal cpu = defaultValue(record.getCpu());
-            BigDecimal memory = defaultValue(record.getMemory());
-            sumCpu = sumCpu.add(cpu);
-            sumMemory = sumMemory.add(memory);
-
-            if (cpu.compareTo(HIGH_CPU_THRESHOLD) >= 0) {
-                highCpuSeconds++;
-            }
-            if (memory.compareTo(HIGH_MEMORY_THRESHOLD) >= 0) {
-                highMemorySeconds++;
-            }
+        List<SystemMetricsRecord> sampledRecords = records.stream()
+                .filter(this::isSampledRecord)
+                .toList();
+        summary.setSampledSeconds(sampledRecords.size());
+        summary.setMissingSeconds(records.size() - sampledRecords.size());
+        if (sampledRecords.isEmpty()) {
+            fillEmptySummary(summary);
+            summary.setMissingSeconds(records.size());
+            return R.success(summary);
         }
 
-        BigDecimal size = BigDecimal.valueOf(records.size());
-        summary.setAvgCpu(sumCpu.divide(size, 2, RoundingMode.HALF_UP));
-        summary.setAvgMemory(sumMemory.divide(size, 2, RoundingMode.HALF_UP));
-        summary.setPeakCpu(records.stream()
+        BigDecimal size = BigDecimal.valueOf(sampledRecords.size());
+        BigDecimal sumCpu = sampledRecords.stream()
                 .map(SystemMetricsRecord::getCpu)
                 .filter(value -> value != null)
-                .max(Comparator.naturalOrder())
-                .orElse(BigDecimal.ZERO));
-        summary.setPeakMemory(records.stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal sumMemory = sampledRecords.stream()
                 .map(SystemMetricsRecord::getMemory)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        summary.setAvgCpu(sumCpu.divide(size, 2, RoundingMode.HALF_UP));
+        summary.setAvgMemory(sumMemory.divide(size, 2, RoundingMode.HALF_UP));
+        summary.setPeakCpu(sampledRecords.stream()
+                .map(this::resolvePeakCpu)
                 .filter(value -> value != null)
                 .max(Comparator.naturalOrder())
                 .orElse(BigDecimal.ZERO));
-        summary.setHighCpuSeconds(highCpuSeconds);
-        summary.setHighMemorySeconds(highMemorySeconds);
+        summary.setPeakMemory(sampledRecords.stream()
+                .map(this::resolvePeakMemory)
+                .filter(value -> value != null)
+                .max(Comparator.naturalOrder())
+                .orElse(BigDecimal.ZERO));
+        summary.setHighCpuSeconds((int) sampledRecords.stream()
+                .map(SystemMetricsRecord::getCpu)
+                .filter(value -> value != null && value.compareTo(HIGH_CPU_THRESHOLD) >= 0)
+                .count());
+        summary.setHighMemorySeconds((int) sampledRecords.stream()
+                .map(SystemMetricsRecord::getMemory)
+                .filter(value -> value != null && value.compareTo(HIGH_MEMORY_THRESHOLD) >= 0)
+                .count());
         return R.success(summary);
     }
 
@@ -128,13 +126,32 @@ public class SystemMetricsServiceImpl implements SystemMetricsService {
         return systemMetricsMapper.selectList(metricsWrapper);
     }
 
-    // 这里保留原始秒级时间戳，analysis 才能把资源侧波动和业务侧延迟/错误做真正的时序关联。
+    // 这里保留秒桶平均值和秒内峰值，analysis 才能同时看到“持续压力”和“短时尖峰”。
     private RunSystemMetricPointVO toRunSystemMetricPoint(SystemMetricsRecord record) {
         RunSystemMetricPointVO point = new RunSystemMetricPointVO();
         point.setTs(record.getTs());
-        point.setCpu(defaultValue(record.getCpu()));
-        point.setMemory(defaultValue(record.getMemory()));
+        point.setCpu(record.getCpu());
+        point.setCpuMax(record.getCpuMax());
+        point.setMemory(record.getMemory());
+        point.setMemoryMax(record.getMemoryMax());
+        point.setSampleCount(record.getSampleCount());
+        point.setMissing(record.getMissing());
         return point;
+    }
+
+    private boolean isSampledRecord(SystemMetricsRecord record) {
+        return record != null
+                && !Boolean.TRUE.equals(record.getMissing())
+                && record.getSampleCount() != null
+                && record.getSampleCount() > 0;
+    }
+
+    private BigDecimal resolvePeakCpu(SystemMetricsRecord record) {
+        return record.getCpuMax() != null ? record.getCpuMax() : record.getCpu();
+    }
+
+    private BigDecimal resolvePeakMemory(SystemMetricsRecord record) {
+        return record.getMemoryMax() != null ? record.getMemoryMax() : record.getMemory();
     }
 
     private void fillEmptySummary(RunSystemMetricSummaryVO summary) {
@@ -144,9 +161,11 @@ public class SystemMetricsServiceImpl implements SystemMetricsService {
         summary.setPeakMemory(BigDecimal.ZERO);
         summary.setHighCpuSeconds(0);
         summary.setHighMemorySeconds(0);
-    }
-
-    private BigDecimal defaultValue(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
+        if (summary.getSampledSeconds() == null) {
+            summary.setSampledSeconds(0);
+        }
+        if (summary.getMissingSeconds() == null) {
+            summary.setMissingSeconds(0);
+        }
     }
 }

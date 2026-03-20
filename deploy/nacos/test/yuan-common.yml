@@ -1,0 +1,9 @@
+# Shared template for test environment
+spring:
+  jackson:
+    time-zone: Asia/Shanghai
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

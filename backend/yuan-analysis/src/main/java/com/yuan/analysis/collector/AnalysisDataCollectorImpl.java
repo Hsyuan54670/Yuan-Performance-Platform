@@ -15,15 +15,18 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.TreeMap;
 
 @Slf4j
 @Component
 // 负责把一次 run 的上下文与秒级指标收集成统一快照，供规则引擎和后续 AI 分析复用。
 public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
+    private static final long RESOURCE_ALIGNMENT_WINDOW_MILLIS = 1000;
+
     @Autowired
     TestFeignClient testFeignClient;
 
@@ -70,8 +73,8 @@ public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
 
         snapshot.setSummary(buildSummary(businessMetricPoints));
         snapshot.setFeature(buildFeature(businessMetricPoints));
-        // 统一时序里既保留业务秒点，也并入资源秒点，方便 AI 做真正的跨信号归因。
-        snapshot.setSeries(buildSeries(mergeSystemMetricPoints(businessMetricPoints, systemMetricPoints)));
+        // 统一时序以业务秒点为主轴，资源点只做贴合，避免两个时间轴并集后把 run 人为拉长。
+        snapshot.setSeries(buildSeries(mergeMetricSeries(businessMetricPoints, systemMetricPoints)));
         applySystemMetricSummary(snapshot.getSummary(), snapshot.getFeature(), loadRunSystemMetricSummary(userId, runId));
         snapshot.setBaseline(loadBaseline(userId, runId, snapshot.getSummary()));
         return snapshot;
@@ -188,49 +191,111 @@ public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
         }
     }
 
-    // 资源秒点按时间戳并入统一序列，缺失业务指标的点保留 null，避免把“未采到”误判成 0。
-    private List<SecondMetricPoint> mergeSystemMetricPoints(List<SecondMetricPoint> businessPoints,
-                                                            List<RunSystemMetricPointDTO> systemPoints) {
-        TreeMap<LocalDateTime, SecondMetricPoint> timeline = new TreeMap<>();
-        List<SecondMetricPoint> pointsWithoutTs = new ArrayList<>();
+    // 统一时序优先保留业务主轴，资源点按最近秒贴合，避免业务/资源并集后把时长放大成稀疏序列。
+    private List<SecondMetricPoint> mergeMetricSeries(List<SecondMetricPoint> businessPoints,
+                                                      List<RunSystemMetricPointDTO> systemPoints) {
+        if (businessPoints == null || businessPoints.isEmpty()) {
+            return toSystemOnlyPoints(systemPoints);
+        }
 
-        if (businessPoints != null) {
-            for (SecondMetricPoint point : businessPoints) {
-                SecondMetricPoint copy = copyPoint(point);
-                if (copy.getTs() == null) {
-                    pointsWithoutTs.add(copy);
-                    continue;
-                }
-                timeline.put(copy.getTs(), copy);
+        List<SecondMetricPoint> alignedPoints = businessPoints.stream()
+                .map(this::copyPoint)
+                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+        List<RunSystemMetricPointDTO> sortedSystemPoints = sortSystemPoints(systemPoints);
+        int nextSystemIndex = 0;
+
+        for (SecondMetricPoint businessPoint : alignedPoints) {
+            if (businessPoint.getTs() == null) {
+                continue;
+            }
+
+            while (nextSystemIndex < sortedSystemPoints.size()
+                    && isEarlierThanAlignmentWindow(sortedSystemPoints.get(nextSystemIndex).getTs(), businessPoint.getTs())) {
+                nextSystemIndex++;
+            }
+
+            int matchedIndex = findClosestSystemPointIndex(sortedSystemPoints, nextSystemIndex, businessPoint.getTs());
+            if (matchedIndex < 0) {
+                continue;
+            }
+
+            applySystemPoint(businessPoint, sortedSystemPoints.get(matchedIndex));
+            nextSystemIndex = matchedIndex + 1;
+        }
+
+        return alignedPoints;
+    }
+
+    private List<RunSystemMetricPointDTO> sortSystemPoints(List<RunSystemMetricPointDTO> systemPoints) {
+        if (systemPoints == null || systemPoints.isEmpty()) {
+            return List.of();
+        }
+
+        return systemPoints.stream()
+                .filter(point -> point != null && point.getTs() != null)
+                .sorted(Comparator.comparing(RunSystemMetricPointDTO::getTs))
+                .toList();
+    }
+
+    private boolean isEarlierThanAlignmentWindow(LocalDateTime systemTs, LocalDateTime businessTs) {
+        return systemTs != null
+                && businessTs != null
+                && systemTs.isBefore(businessTs.minusSeconds(1));
+    }
+
+    private int findClosestSystemPointIndex(List<RunSystemMetricPointDTO> systemPoints,
+                                            int startIndex,
+                                            LocalDateTime businessTs) {
+        int bestIndex = -1;
+        long bestDiff = Long.MAX_VALUE;
+
+        for (int i = startIndex; i < systemPoints.size(); i++) {
+            RunSystemMetricPointDTO candidate = systemPoints.get(i);
+            LocalDateTime systemTs = candidate.getTs();
+            if (systemTs == null) {
+                continue;
+            }
+
+            long diffMillis = Math.abs(Duration.between(systemTs, businessTs).toMillis());
+            if (systemTs.isAfter(businessTs.plusSeconds(1)) && diffMillis > RESOURCE_ALIGNMENT_WINDOW_MILLIS) {
+                break;
+            }
+            if (diffMillis > RESOURCE_ALIGNMENT_WINDOW_MILLIS) {
+                continue;
+            }
+
+            if (diffMillis < bestDiff) {
+                bestDiff = diffMillis;
+                bestIndex = i;
             }
         }
 
-        if (systemPoints != null) {
-            for (RunSystemMetricPointDTO systemPoint : systemPoints) {
-                if (systemPoint == null) {
-                    continue;
-                }
-                if (systemPoint.getTs() == null) {
+        return bestIndex;
+    }
+
+    // 没有业务秒点时，退回资源主轴，至少保留资源时序给规则和 AI 解释层使用。
+    private List<SecondMetricPoint> toSystemOnlyPoints(List<RunSystemMetricPointDTO> systemPoints) {
+        if (systemPoints == null || systemPoints.isEmpty()) {
+            return List.of();
+        }
+
+        return sortSystemPoints(systemPoints).stream()
+                .map(systemPoint -> {
                     SecondMetricPoint point = new SecondMetricPoint();
-                    point.setCpu(defaultValue(systemPoint.getCpu()));
-                    point.setMemory(defaultValue(systemPoint.getMemory()));
-                    pointsWithoutTs.add(point);
-                    continue;
-                }
+                    point.setTs(systemPoint.getTs());
+                    applySystemPoint(point, systemPoint);
+                    return point;
+                })
+                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+    }
 
-                SecondMetricPoint mergedPoint = timeline.computeIfAbsent(systemPoint.getTs(), ts -> {
-                    SecondMetricPoint created = new SecondMetricPoint();
-                    created.setTs(ts);
-                    return created;
-                });
-                mergedPoint.setCpu(defaultValue(systemPoint.getCpu()));
-                mergedPoint.setMemory(defaultValue(systemPoint.getMemory()));
-            }
-        }
-
-        List<SecondMetricPoint> merged = new ArrayList<>(timeline.values());
-        merged.addAll(pointsWithoutTs);
-        return merged;
+    private void applySystemPoint(SecondMetricPoint target, RunSystemMetricPointDTO source) {
+        target.setCpu(source.getCpu());
+        target.setCpuMax(source.getCpuMax());
+        target.setMemory(source.getMemory());
+        target.setMemoryMax(source.getMemoryMax());
+        target.setSampleCount(source.getSampleCount());
+        target.setMissing(source.getMissing());
     }
 
     private SecondMetricPoint copyPoint(SecondMetricPoint source) {
@@ -242,7 +307,11 @@ public class AnalysisDataCollectorImpl implements AnalysisDataCollector {
         copy.setP99(source.getP99());
         copy.setErrorRate(source.getErrorRate());
         copy.setCpu(source.getCpu());
+        copy.setCpuMax(source.getCpuMax());
         copy.setMemory(source.getMemory());
+        copy.setMemoryMax(source.getMemoryMax());
+        copy.setSampleCount(source.getSampleCount());
+        copy.setMissing(source.getMissing());
         return copy;
     }
 

@@ -20,21 +20,27 @@ import java.util.stream.Collectors;
 @Component
 public class RuleEngine {
 
+    // 绝对阈值负责兜底判定，避免没有基线时完全失去判断能力。
     private static final BigDecimal HIGH_LATENCY_THRESHOLD = BigDecimal.valueOf(2000);
     private static final BigDecimal ERROR_RATE_THRESHOLD = BigDecimal.valueOf(5);
     private static final BigDecimal AVG_CPU_THRESHOLD = BigDecimal.valueOf(80);
     private static final BigDecimal PEAK_CPU_THRESHOLD = BigDecimal.valueOf(90);
     private static final BigDecimal AVG_MEMORY_THRESHOLD = BigDecimal.valueOf(80);
     private static final BigDecimal PEAK_MEMORY_THRESHOLD = BigDecimal.valueOf(90);
+
+    // 基线阈值负责识别“相对退化”，例如同一任务虽然没触发硬阈值，但已经明显变差。
     private static final BigDecimal THROUGHPUT_REGRESSION_RATIO = BigDecimal.valueOf(0.85);
     private static final BigDecimal P99_REGRESSION_RATIO = BigDecimal.valueOf(0.30);
     private static final BigDecimal ERROR_RATE_REGRESSION_RATIO = BigDecimal.ONE;
+
+    // 持续时间阈值用于区分瞬时抖动和持续性风险。
     private static final int HIGH_LATENCY_SECONDS_THRESHOLD = 3;
     private static final int ERROR_SPIKE_SECONDS_THRESHOLD = 3;
     private static final int HIGH_CPU_SECONDS_THRESHOLD = 5;
     private static final int HIGH_MEMORY_SECONDS_THRESHOLD = 5;
     private static final int MIN_SCORE = 55;
 
+    // 规则引擎只做确定性判断，产出规则命中、基准分和基准摘要，后续 AI 只在此基础上做增强。
     public AnalysisComputationResult analyze(AnalysisSnapshot snapshot) {
         AnalysisComputationResult result = new AnalysisComputationResult();
         List<RuleHit> hits = new ArrayList<>();
@@ -71,6 +77,7 @@ public class RuleEngine {
         return "FAILED".equalsIgnoreCase(snapshot.getFinalStatus());
     }
 
+    // 高延迟同时看绝对风险和基线退化，避免只盯当前值而漏掉“虽然没爆表但明显变慢”的情况。
     private boolean isHighLatency(AnalysisSnapshot snapshot) {
         MetricSummary summary = snapshot.getSummary();
         MetricFeature feature = snapshot.getFeature();
@@ -85,6 +92,7 @@ public class RuleEngine {
         return absoluteRisk || baselineRisk;
     }
 
+    // 错误率同样采用“当前值 + 持续秒数 + 基线恶化”三路合并判断，避免被偶发错误误伤。
     private boolean isErrorSpike(AnalysisSnapshot snapshot) {
         MetricSummary summary = snapshot.getSummary();
         MetricFeature feature = snapshot.getFeature();
@@ -264,6 +272,7 @@ public class RuleEngine {
         return hit;
     }
 
+    // 评分是规则层的基准分，不追求非常细腻，但要保证可解释、可重复。
     private void fillScoreAndGrade(AnalysisComputationResult result, List<RuleHit> hits, AnalysisSnapshot snapshot) {
         if (isFailed(snapshot)) {
             result.setScore(45);
@@ -307,6 +316,7 @@ public class RuleEngine {
         result.setSummary("本次压测识别到以下主要风险：" + titles + "。建议优先处理高优先级问题，再继续观察整体性能趋势。");
     }
 
+    // 当前持久化和展示层还在消费旧的 bottleneck/suggestion 实体，这里负责做一层兼容映射。
     private void fillLegacyItems(AnalysisComputationResult result, List<RuleHit> hits, AnalysisSnapshot snapshot) {
         for (RuleHit hit : hits) {
             BottleneckRecord bottleneck = new BottleneckRecord();
@@ -325,6 +335,7 @@ public class RuleEngine {
         }
     }
 
+    // 时间点目前更偏报告展示标签，而不是真正精确定位到秒级时序点。
     private String resolveTimePoint(RuleHit hit, AnalysisSnapshot snapshot) {
         return switch (hit.getCode()) {
             case "FAILED_RUN" -> "运行结束";

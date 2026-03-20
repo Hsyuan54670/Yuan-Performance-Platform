@@ -1,8 +1,11 @@
 package com.yuan.monitor.mq;
 
 import com.yuan.api.test.mq.TestStatusMessage;
+import com.yuan.monitor.collector.SystemMetricsPersistTask;
 import com.yuan.monitor.entity.TestStatusRecord;
 import com.yuan.monitor.mapper.TestStatusRecordMapper;
+import com.yuan.monitor.runtime.ActiveRunRegistry;
+import com.yuan.monitor.service.AlertEvaluateService;
 import com.yuan.monitor.vo.TaskStatusPushVO;
 import com.yuan.monitor.websocket.MonitorSessionManager;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +24,15 @@ public class TestStatusConsumer {
     @Autowired
     private MonitorSessionManager monitorSessionManager;
 
+    @Autowired
+    private ActiveRunRegistry activeRunRegistry;
+
+    @Autowired
+    private SystemMetricsPersistTask systemMetricsPersistTask;
+
+    @Autowired
+    private AlertEvaluateService alertEvaluateService;
+
     @RabbitListener(queues = TEST_STATUS_QUEUE )
     public void onMessage(TestStatusMessage message) {
         TestStatusRecord testStatusRecord = new TestStatusRecord();
@@ -33,6 +45,9 @@ public class TestStatusConsumer {
         log.info("Received test status message: {}", testStatusRecord);
 
         testStatusRecordMapper.insert(testStatusRecord);
+        activeRunRegistry.onStatusChanged(testStatusRecord);
+        systemMetricsPersistTask.trackRunAtCurrentSecond(testStatusRecord);
+        alertEvaluateService.recoverAlertsOnRunFinished(testStatusRecord);
 
         if (message.getTaskId() != null) {
             TaskStatusPushVO pushVO = new TaskStatusPushVO();

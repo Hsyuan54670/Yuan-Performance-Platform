@@ -16,6 +16,28 @@ export interface MetricsSummary {
   timestamp: string | null;
 }
 
+export interface RunSystemMetricSummary {
+  runId: number;
+  avgCpu: number;
+  avgMemory: number;
+  peakCpu: number;
+  peakMemory: number;
+  highCpuSeconds: number;
+  highMemorySeconds: number;
+  sampledSeconds: number;
+  missingSeconds: number;
+}
+
+export interface RunSystemMetricPoint {
+  ts: string;
+  cpu: number | null;
+  cpuMax: number | null;
+  memory: number | null;
+  memoryMax: number | null;
+  sampleCount: number;
+  missing: boolean;
+}
+
 export interface AlertRule {
   id: number;
   name: string;

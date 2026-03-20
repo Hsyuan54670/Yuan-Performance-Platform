@@ -23,6 +23,19 @@ spring:
     username: consumer
     password: 123456
     virtual-host: test_monitor
+  task:
+    scheduling:
+      pool:
+        size: 4
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+yuan:
+  monitor:
+    system-metrics:
+      sample-interval-ms: 200
+      flush-interval-ms: 500
+      heartbeat-interval-ms: 1000
+      tracking-grace-seconds: 0
+

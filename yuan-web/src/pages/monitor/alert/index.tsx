@@ -21,6 +21,7 @@ import {
 } from "antd";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../../hooks/useAuth";
 import {
   createAlertRuleApi,
   deleteAlertRuleApi,
@@ -32,6 +33,7 @@ import {
 } from "../../../api/monitor";
 import type { ActiveAlert, AlertRecord, AlertRule, AlertRulePayload } from "../../../types/monitor";
 import { formatDateTime } from "../../../utils/format";
+import { PermissionCodes } from "../../../utils/permissions";
 import { getRequestErrorMessage } from "../../../utils/request";
 
 const metricOptions: AlertRulePayload["metric"][] = ["CPU", "MEMORY", "P99", "ERROR_RATE"];
@@ -48,6 +50,8 @@ function MonitorAlertPage() {
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
   const [form] = Form.useForm<AlertRulePayload>();
   const { t } = useTranslation();
+  const { hasPermission } = useAuth();
+  const canManageAlerts = hasPermission(PermissionCodes.MONITOR_ALERT_WRITE);
 
   const loadAlerts = async () => {
     setLoading(true);
@@ -171,9 +175,11 @@ function MonitorAlertPage() {
                 <Typography.Text type="secondary">{t("monitorAlert.subtitle")}</Typography.Text>
                 <Typography.Text type="secondary">{t("monitorAlert.backendNote")}</Typography.Text>
               </Space>
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
-                {t("monitorAlert.newRule")}
-              </Button>
+              {canManageAlerts ? (
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
+                  {t("monitorAlert.newRule")}
+                </Button>
+              ) : null}
             </Space>
           </Card>
         </Col>
@@ -247,30 +253,32 @@ function MonitorAlertPage() {
                   title: t("monitorAlert.colEnabled"),
                   dataIndex: "enabled",
                   render: (value: boolean, record: AlertRule) => (
-                    <Switch checked={value} onChange={(checked) => void handleSwitch(record, checked)} />
+                    <Switch checked={value} disabled={!canManageAlerts} onChange={(checked) => void handleSwitch(record, checked)} />
                   )
                 },
-                {
-                  title: t("monitorAlert.colAction"),
-                  key: "action",
-                  render: (_: unknown, record: AlertRule) => (
-                    <Space size="small">
-                      <Button type="link" icon={<EditOutlined />} onClick={() => openEditDrawer(record)}>
-                        {t("monitorAlert.editRule")}
-                      </Button>
-                      <Popconfirm
-                        title={t("monitorAlert.deleteConfirm")}
-                        okText={t("monitorAlert.confirmDelete")}
-                        cancelText={t("monitorAlert.cancel")}
-                        onConfirm={() => void handleDelete(record.id)}
-                      >
-                        <Button type="link" danger icon={<DeleteOutlined />}>
-                          {t("monitorAlert.deleteRule")}
-                        </Button>
-                      </Popconfirm>
-                    </Space>
-                  )
-                }
+                ...(canManageAlerts
+                  ? [{
+                      title: t("monitorAlert.colAction"),
+                      key: "action",
+                      render: (_: unknown, record: AlertRule) => (
+                        <Space size="small">
+                          <Button type="link" icon={<EditOutlined />} onClick={() => openEditDrawer(record)}>
+                            {t("monitorAlert.editRule")}
+                          </Button>
+                          <Popconfirm
+                            title={t("monitorAlert.deleteConfirm")}
+                            okText={t("monitorAlert.confirmDelete")}
+                            cancelText={t("monitorAlert.cancel")}
+                            onConfirm={() => void handleDelete(record.id)}
+                          >
+                            <Button type="link" danger icon={<DeleteOutlined />}>
+                              {t("monitorAlert.deleteRule")}
+                            </Button>
+                          </Popconfirm>
+                        </Space>
+                      )
+                    }]
+                  : [])
               ]}
             />
           </Card>
@@ -312,29 +320,31 @@ function MonitorAlertPage() {
         onClose={closeDrawer}
         destroyOnHidden
         extra={
-          <Button type="primary" loading={submitting} onClick={() => void handleSubmit()}>
-            {editingRule ? t("monitorAlert.saveChanges") : t("common.save")}
-          </Button>
+          canManageAlerts ? (
+            <Button type="primary" loading={submitting} onClick={() => void handleSubmit()}>
+              {editingRule ? t("monitorAlert.saveChanges") : t("common.save")}
+            </Button>
+          ) : null
         }
       >
         <Form form={form} layout="vertical">
           <Form.Item name="name" label={t("monitorAlert.fieldRuleName")} rules={[{ required: true, message: t("monitorAlert.nameRequired") }]}>
-            <Input />
+            <Input disabled={!canManageAlerts} />
           </Form.Item>
           <Form.Item name="metric" label={t("monitorAlert.fieldMetric")} rules={[{ required: true }]}>
-            <Select options={metricOptions.map((value) => ({ label: value, value }))} />
+            <Select disabled={!canManageAlerts} options={metricOptions.map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item name="op" label={t("monitorAlert.fieldOperator")} rules={[{ required: true }]}>
-            <Select options={operatorOptions.map((value) => ({ label: value, value }))} />
+            <Select disabled={!canManageAlerts} options={operatorOptions.map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item name="threshold" label={t("monitorAlert.fieldThreshold")} rules={[{ required: true, message: t("monitorAlert.thresholdRequired") }]}>
-            <InputNumber min={0} precision={2} style={{ width: "100%" }} />
+            <InputNumber min={0} precision={2} disabled={!canManageAlerts} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item name="level" label={t("monitorAlert.fieldLevel")} rules={[{ required: true }]}>
-            <Select options={levelOptions.map((value) => ({ label: value, value }))} />
+            <Select disabled={!canManageAlerts} options={levelOptions.map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item name="enabled" label={t("monitorAlert.fieldEnabled")} valuePropName="checked">
-            <Switch />
+            <Switch disabled={!canManageAlerts} />
           </Form.Item>
         </Form>
       </Drawer>
@@ -343,4 +353,3 @@ function MonitorAlertPage() {
 }
 
 export default MonitorAlertPage;
-

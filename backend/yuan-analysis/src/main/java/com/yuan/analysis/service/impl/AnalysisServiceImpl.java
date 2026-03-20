@@ -14,6 +14,7 @@ import com.yuan.analysis.model.AnalysisSnapshot;
 import com.yuan.analysis.report.AnalysisReportHtmlRenderer;
 import com.yuan.analysis.rule.RuleEngine;
 import com.yuan.analysis.service.AnalysisService;
+import com.yuan.analysis.vo.AnalysisReportSummaryVO;
 import com.yuan.analysis.vo.AnalysisResultVO;
 import com.yuan.api.test.mq.TestCompletedMessage;
 import com.yuan.common.constant.HttpStatus;
@@ -23,6 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -84,6 +88,37 @@ public class AnalysisServiceImpl implements AnalysisService {
             log.error("Failed to generate analysis report, userId={}, taskId={}, runId={}", userId, taskId, runId, e);
             throw new RuntimeException("Failed to generate analysis report", e);
         }
+    }
+
+    @Override
+    public R<List<AnalysisReportSummaryVO>> listReports(
+            Long userId,
+            Long taskId,
+            String grade,
+            LocalDateTime createdFrom,
+            LocalDateTime createdTo
+    ) {
+        LambdaQueryWrapper<AnalysisReport> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AnalysisReport::getUserId, userId);
+        if (taskId != null) {
+            wrapper.eq(AnalysisReport::getTaskId, taskId);
+        }
+        if (StringUtils.hasText(grade)) {
+            wrapper.eq(AnalysisReport::getGrade, grade.trim().toUpperCase());
+        }
+        if (createdFrom != null) {
+            wrapper.ge(AnalysisReport::getCreatedAt, createdFrom);
+        }
+        if (createdTo != null) {
+            wrapper.le(AnalysisReport::getCreatedAt, createdTo);
+        }
+        wrapper.orderByDesc(AnalysisReport::getCreatedAt)
+                .orderByDesc(AnalysisReport::getId);
+        return R.success(
+                analysisReportMapper.selectList(wrapper).stream()
+                        .map(this::toSummaryVO)
+                        .toList()
+        );
     }
 
     @Override
@@ -226,6 +261,20 @@ public class AnalysisServiceImpl implements AnalysisService {
             vo.getBottlenecks().add(item);
         });
 
+        return vo;
+    }
+
+    private AnalysisReportSummaryVO toSummaryVO(AnalysisReport report) {
+        AnalysisReportSummaryVO vo = new AnalysisReportSummaryVO();
+        vo.setId(report.getId());
+        vo.setTaskId(report.getTaskId());
+        vo.setRunId(report.getRunId());
+        vo.setGrade(report.getGrade());
+        vo.setScore(report.getScore());
+        vo.setSummary(report.getSummary());
+        vo.setStatus(report.getStatus());
+        vo.setSource(report.getSource());
+        vo.setCreatedAt(report.getCreatedAt());
         return vo;
     }
 }

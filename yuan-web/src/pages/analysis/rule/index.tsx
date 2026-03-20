@@ -14,13 +14,16 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
   message
 } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../../hooks/useAuth";
 import { createRuleApi, deleteRuleApi, listRulesApi, switchRuleApi, updateRuleApi } from "../../../api/analysis";
 import type { AnalysisRule, AnalysisRulePayload, AnalysisRulePriority, AnalysisRuleSeverity, AnalysisRuleType } from "../../../types/analysis";
+import { PermissionCodes } from "../../../utils/permissions";
 import { getRequestErrorMessage } from "../../../utils/request";
 
 const severityOptions: AnalysisRuleSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
@@ -36,7 +39,9 @@ function AnalysisRulePage() {
   const [editingRule, setEditingRule] = useState<AnalysisRule | null>(null);
   const [form] = Form.useForm<AnalysisRulePayload>();
   const { t } = useTranslation();
+  const { hasPermission } = useAuth();
   const currentRuleType = Form.useWatch("ruleType", form) as AnalysisRuleType | undefined;
+  const canManageRules = hasPermission(PermissionCodes.ANALYSIS_RULE_WRITE);
 
   const engineRules = useMemo(() => rules.filter((rule) => rule.ruleType === "ENGINE"), [rules]);
   const aiRules = useMemo(() => rules.filter((rule) => rule.ruleType === "AI"), [rules]);
@@ -144,18 +149,18 @@ function AnalysisRulePage() {
 
   const renderActionColumn = (_: unknown, record: AnalysisRule) => (
     <Space size="small">
-      <Button type="link" icon={<EditOutlined />} onClick={() => openEditDrawer(record)}>
-        {t("analysisRule.editRule")}
-      </Button>
+      <Tooltip title={t("analysisRule.editRule")}>
+        <Button type="link" icon={<EditOutlined />} onClick={() => openEditDrawer(record)} aria-label={t("analysisRule.editRule")} />
+      </Tooltip>
       <Popconfirm
         title={t("analysisRule.deleteConfirm")}
         okText={t("analysisRule.confirmDelete")}
         cancelText={t("analysisRule.cancel")}
         onConfirm={() => void handleDelete(record.id)}
       >
-        <Button type="link" danger icon={<DeleteOutlined />}>
-          {t("analysisRule.deleteRule")}
-        </Button>
+        <Tooltip title={t("analysisRule.deleteRule")}>
+          <Button type="link" danger icon={<DeleteOutlined />} aria-label={t("analysisRule.deleteRule")} />
+        </Tooltip>
       </Popconfirm>
     </Space>
   );
@@ -170,14 +175,16 @@ function AnalysisRulePage() {
                 <Typography.Title level={3} style={{ margin: 0 }}>{t("analysisRule.title")}</Typography.Title>
                 <Typography.Text type="secondary">{t("analysisRule.subtitle")}</Typography.Text>
               </div>
-              <Space wrap>
-                <Button icon={<PlusOutlined />} onClick={() => openCreateDrawer("ENGINE")}>
-                  {t("analysisRule.addEngineRule")}
-                </Button>
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreateDrawer("AI")}>
-                  {t("analysisRule.addAiRule")}
-                </Button>
-              </Space>
+              {canManageRules ? (
+                <Space wrap>
+                  <Button icon={<PlusOutlined />} onClick={() => openCreateDrawer("ENGINE")}>
+                    {t("analysisRule.addEngineRule")}
+                  </Button>
+                  <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreateDrawer("AI")}>
+                    {t("analysisRule.addAiRule")}
+                  </Button>
+                </Space>
+              ) : null}
             </Space>
           </Card>
         </Col>
@@ -204,9 +211,9 @@ function AnalysisRulePage() {
                 {
                   title: t("analysisRule.colEnabled"),
                   dataIndex: "enabled",
-                  render: (value: boolean, record: AnalysisRule) => <Switch checked={value} onChange={(checked) => void handleSwitch(record, checked)} />
+                  render: (value: boolean, record: AnalysisRule) => <Switch checked={value} disabled={!canManageRules} onChange={(checked) => void handleSwitch(record, checked)} />
                 },
-                { title: t("analysisRule.colAction"), key: "action", render: renderActionColumn }
+                ...(canManageRules ? [{ title: t("analysisRule.colAction"), key: "action", render: renderActionColumn }] : [])
               ]}
             />
           </Card>
@@ -234,9 +241,9 @@ function AnalysisRulePage() {
                 {
                   title: t("analysisRule.colEnabled"),
                   dataIndex: "enabled",
-                  render: (value: boolean, record: AnalysisRule) => <Switch checked={value} onChange={(checked) => void handleSwitch(record, checked)} />
+                  render: (value: boolean, record: AnalysisRule) => <Switch checked={value} disabled={!canManageRules} onChange={(checked) => void handleSwitch(record, checked)} />
                 },
-                { title: t("analysisRule.colAction"), key: "action", render: renderActionColumn }
+                ...(canManageRules ? [{ title: t("analysisRule.colAction"), key: "action", render: renderActionColumn }] : [])
               ]}
             />
           </Card>
@@ -249,38 +256,40 @@ function AnalysisRulePage() {
         onClose={closeDrawer}
         destroyOnHidden
         extra={
-          <Button type="primary" loading={submitting} onClick={() => void handleSubmit()}>
-            {editingRule ? t("analysisRule.saveChanges") : t("common.save")}
-          </Button>
+          canManageRules ? (
+            <Button type="primary" loading={submitting} onClick={() => void handleSubmit()}>
+              {editingRule ? t("analysisRule.saveChanges") : t("common.save")}
+            </Button>
+          ) : null
         }
       >
         <Form layout="vertical" form={form} initialValues={{ ruleType: "ENGINE", enabled: true, severity: "HIGH", priority: "P1" }}>
           <Form.Item name="ruleType" label={t("analysisRule.fieldRuleType")} rules={[{ required: true }]}>
-            <Select options={[{ label: t("analysisRule.ruleTypeEngine"), value: "ENGINE" }, { label: t("analysisRule.ruleTypeAi"), value: "AI" }]} />
+            <Select disabled={!canManageRules} options={[{ label: t("analysisRule.ruleTypeEngine"), value: "ENGINE" }, { label: t("analysisRule.ruleTypeAi"), value: "AI" }]} />
           </Form.Item>
           <Form.Item name="name" label={t("analysisRule.fieldRuleName")} rules={[{ required: true, message: t("analysisRule.nameRequired") }]}>
-            <Input />
+            <Input disabled={!canManageRules} />
           </Form.Item>
           {currentRuleType === "AI" ? (
             <Form.Item name="instruction" label={t("analysisRule.fieldInstruction")} rules={[{ required: true, message: t("analysisRule.instructionRequired") }]}>
-              <Input.TextArea rows={5} placeholder={t("analysisRule.instructionPlaceholder")} />
+              <Input.TextArea rows={5} disabled={!canManageRules} placeholder={t("analysisRule.instructionPlaceholder")} />
             </Form.Item>
           ) : (
             <Form.Item name="expression" label={t("analysisRule.fieldExpression")} rules={[{ required: true, message: t("analysisRule.expressionRequired") }]}>
-              <Input.TextArea rows={4} placeholder="summary.p99 > 2000 && feature.highLatencySeconds >= 3" />
+              <Input.TextArea rows={4} disabled={!canManageRules} placeholder="summary.p99 > 2000 && feature.highLatencySeconds >= 3" />
             </Form.Item>
           )}
           <Form.Item name="bottleneckType" label={t("analysisRule.fieldBottleneckType")} rules={[{ required: true }]}>
-            <Select options={(currentRuleType === "AI" ? aiTypeOptions : engineTypeOptions).map((value) => ({ label: value, value }))} />
+            <Select disabled={!canManageRules} options={(currentRuleType === "AI" ? aiTypeOptions : engineTypeOptions).map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item name="severity" label={t("analysisRule.fieldSeverity")} rules={[{ required: true }]}>
-            <Select options={severityOptions.map((value) => ({ label: value, value }))} />
+            <Select disabled={!canManageRules} options={severityOptions.map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item name="priority" label={t("analysisRule.fieldPriority")} rules={[{ required: true }]}>
-            <Select options={priorityOptions.map((value) => ({ label: value, value }))} />
+            <Select disabled={!canManageRules} options={priorityOptions.map((value) => ({ label: value, value }))} />
           </Form.Item>
           <Form.Item name="enabled" label={t("analysisRule.fieldEnabled")} valuePropName="checked">
-            <Switch />
+            <Switch disabled={!canManageRules} />
           </Form.Item>
         </Form>
       </Drawer>
@@ -289,3 +298,7 @@ function AnalysisRulePage() {
 }
 
 export default AnalysisRulePage;
+
+
+
+

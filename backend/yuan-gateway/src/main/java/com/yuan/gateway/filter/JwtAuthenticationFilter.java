@@ -16,7 +16,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.yuan.common.constant.CommonConstant.REDIS_BLACKLIST_TOKEN;
@@ -53,11 +52,14 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         } catch (Exception e) {
             return unauthorized(exchange, "Token无效");
         }
-        String userId = claims.get("userId").toString();
+
+        String userId = String.valueOf(claims.get("userId"));
+        String permissions = claims.get("permissions") == null ? "" : String.valueOf(claims.get("permissions"));
 
         ServerHttpRequest mutatedRequest = exchange.getRequest()
                 .mutate()
                 .header("X-User-Id", userId)
+                .header("X-User-Permissions", permissions)
                 .build();
 
         ServerWebExchange mutatedExchange = exchange.mutate()
@@ -74,18 +76,17 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 || path.startsWith("/ws/");
     }
 
-    public Map<String,Object> isValidToken(String token) {
-        Map<String,Object> claims = null;
+    public Map<String, Object> isValidToken(String token) {
+        Map<String, Object> claims = null;
         try {
-           claims=JwtUtil.parseToken(token);
+            claims = JwtUtil.parseToken(token);
         } catch (Exception e) {
             return null;
         }
-        if(Boolean.TRUE.equals(stringRedisTemplate.hasKey(REDIS_BLACKLIST_TOKEN + token))) {
+        if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(REDIS_BLACKLIST_TOKEN + token))) {
             return null;
         }
         return claims;
-
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange, String message) {

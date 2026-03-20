@@ -1,5 +1,6 @@
 package com.yuan.test.jmeter;
 
+import com.yuan.test.constant.RampType;
 import com.yuan.test.entity.TestScene;
 import com.yuan.test.entity.TestSceneStep;
 import com.yuan.test.entity.TestTask;
@@ -14,13 +15,13 @@ import org.apache.jmeter.protocol.http.control.gui.HttpTestSampleGui;
 import org.apache.jmeter.protocol.http.sampler.HTTPSamplerBase;
 import org.apache.jmeter.protocol.http.sampler.HTTPSamplerProxy;
 import org.apache.jmeter.reporters.ResultCollector;
-import org.apache.jmeter.reporters.Summariser;
 import org.apache.jmeter.testelement.TestElement;
 import org.apache.jmeter.testelement.TestPlan;
 import org.apache.jmeter.threads.ThreadGroup;
 import org.apache.jorphan.collections.ListedHashTree;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Component;
+
 import java.net.URL;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -33,49 +34,143 @@ import java.util.List;
 @Slf4j
 @Component
 public class JmeterTestPlanBuilder {
+    private static final int DEFAULT_STAIR_STEPS = 5;
+    private static final int MAX_RAMP_WINDOW_SECONDS = 60;
+
     private final JmeterConfig jmeterConfig;
     private final JmeterInitializer jmeterInitializer;
+
     public JmeterTestPlanBuilder(JmeterConfig jmeterConfig, JmeterInitializer jmeterInitializer) {
         this.jmeterConfig = jmeterConfig;
         this.jmeterInitializer = jmeterInitializer;
     }
 
-
     /**
      * 核心方法：构建完整的 JMeter HashTree（JMeter的执行树结构）
      * @return 可直接运行的 HashTree
      */
-    public ListedHashTree build(com.yuan.test.entity.TestPlan plan , TestScene scene , TestTask task, List<TestSceneStep> steps, ResultCollector resultCollector, TestTaskRun taskRun) throws Exception {
+    public ListedHashTree build(com.yuan.test.entity.TestPlan plan, TestScene scene, TestTask task,
+                                List<TestSceneStep> steps, ResultCollector resultCollector, TestTaskRun taskRun) throws Exception {
         // ====================== 0. 初始化 JMeter 环境（必须第一步做！） ======================
         jmeterInitializer.initializeJmeterEngine();
 
         // ====================== 1. 创建测试计划（TestPlan）：根节点 ======================
         TestPlan testPlan = new TestPlan(plan.getName());
-        testPlan.setFunctionalMode(false); // 关闭功能测试模式（压测用false，功能测试用true）
-        testPlan.setTearDownOnShutdown(true); // 测试结束后执行清理
-        testPlan.setUserDefinedVariables(new Arguments()); // 初始化用户定义变量（可选，这里留空）
+        testPlan.setFunctionalMode(false);
+        testPlan.setTearDownOnShutdown(true);
+        testPlan.setUserDefinedVariables(new Arguments());
 
-        // ====================== 2. 创建线程组（ThreadGroup）：模拟用户 ======================
-        ThreadGroup threadGroup = new ThreadGroup();
-        threadGroup.setName(scene.getName());
-        threadGroup.setNumThreads(plan.getConcurrency()); // 并发数：10个线程（模拟10个用户）
-        // TODO 根据rampType设置RampUp
-        threadGroup.setRampUp(5); // 升压时间：5秒内启动所有10个线程（每秒启动2个）
-        threadGroup.setScheduler(true); // 开启调度器（用于设置压测时长）
-        threadGroup.setDuration(plan.getDuration()); // 压测时长：60秒（1分钟）
-        threadGroup.setDelay(0); // 启动延迟：0秒（立即开始）
-        threadGroup.setSamplerController(createLoopController()); // 设置循环控制器（线程组的核心子控制器）
+        // ====================== 2. 计算线程组方案：线性加压用单线程组，阶梯加压拆成多个分段线程组 ======================
+        List<ThreadGroupSpec> threadGroupSpecs = buildThreadGroupSpecs(plan, scene);
 
         // ====================== 3. 创建 HTTP 请求默认值（可选但推荐：统一配置域名、协议等） ======================
-        // 作用：避免每个 HTTP 采样器重复写 protocol、domain、编码等，统一管理
-        URL tagetUrl = new URL(plan.getTargetUrl());
-        String protocol = tagetUrl.getProtocol();
-        String domain = tagetUrl.getHost();
-        int port = tagetUrl.getPort();
-        if(port == -1) {
-            port = tagetUrl.getDefaultPort();
+        URL targetUrl = new URL(plan.getTargetUrl());
+        String protocol = targetUrl.getProtocol();
+        String domain = targetUrl.getHost();
+        int port = targetUrl.getPort();
+        if (port == -1) {
+            port = targetUrl.getDefaultPort();
         }
 
+        // ====================== 4. 创建监听器（Listener：收集结果） ======================
+        resultCollector.setName("汇总报告");
+        resultCollector.setFilename(Paths.get(jmeterConfig.getResultsDir(), "run_" + taskRun.getId() + ".jtl").toString());
+
+        // ====================== 5. 组装 HashTree（核心：构建层级结构） ======================
+        ListedHashTree testPlanTree = new ListedHashTree();
+        testPlanTree.add(testPlan);
+
+        ListedHashTree threadGroupTree = testPlanTree.getTree(testPlan);
+        for (ThreadGroupSpec spec : threadGroupSpecs) {
+            ThreadGroup threadGroup = createThreadGroup(spec);
+            threadGroupTree.add(threadGroup);
+
+            // 每个线程组都挂一份 HTTP 默认值和采样器，保证线性/阶梯两种模式下请求树结构一致。
+            ListedHashTree samplerTree = threadGroupTree.getTree(threadGroup);
+            samplerTree.add(createHttpDefaults(protocol, domain, port));
+            // TODO step.weight 权重未处理
+            for (TestSceneStep step : steps) {
+                samplerTree.add(createHTTPSampler(step));
+            }
+        }
+        // 监听器挂在 TestPlan 层，统一接收所有线程组的结果。
+        threadGroupTree.add(resultCollector);
+
+        return testPlanTree;
+    }
+
+    private List<ThreadGroupSpec> buildThreadGroupSpecs(com.yuan.test.entity.TestPlan plan, TestScene scene) {
+        int concurrency = Math.max(1, plan.getConcurrency());
+        int durationSeconds = Math.max(1, plan.getDuration());
+        int rampWindowSeconds = computeRampWindowSeconds(durationSeconds);
+        RampType rampType = RampType.fromValue(plan.getRampType());
+
+        if (rampType == RampType.STAIR) {
+            return buildStairThreadGroups(scene.getName(), concurrency, durationSeconds, rampWindowSeconds);
+        }
+
+        return List.of(new ThreadGroupSpec(
+                scene.getName(),
+                concurrency,
+                Math.max(1, rampWindowSeconds),
+                0,
+                durationSeconds
+        ));
+    }
+
+    /**
+     * 当前计划模型还没有独立的加压窗口字段，所以这里先用一套稳定的默认策略：
+     * 在总时长的前半段内完成升压，但最长不超过 60 秒，避免长任务一直卡在升压阶段。
+     */
+    private int computeRampWindowSeconds(int durationSeconds) {
+        if (durationSeconds <= 1) {
+            return 1;
+        }
+        return Math.max(1, Math.min(MAX_RAMP_WINDOW_SECONDS, durationSeconds / 2));
+    }
+
+    /**
+     * 阶梯加压的默认策略：
+     * 把目标并发拆成最多 5 个台阶，在 rampWindow 内逐级抬高负载；
+     * 每一级线程组都只负责“新增的那一批用户”，并持续跑到整轮压测结束。
+     */
+    private List<ThreadGroupSpec> buildStairThreadGroups(String sceneName, int concurrency,
+                                                         int durationSeconds, int rampWindowSeconds) {
+        int stepCount = Math.max(1, Math.min(Math.min(DEFAULT_STAIR_STEPS, concurrency), rampWindowSeconds));
+        int baseThreads = concurrency / stepCount;
+        int remainderThreads = concurrency % stepCount;
+        List<ThreadGroupSpec> specs = new ArrayList<>(stepCount);
+
+        for (int stepIndex = 0; stepIndex < stepCount; stepIndex++) {
+            int threadsForStep = baseThreads + (stepIndex < remainderThreads ? 1 : 0);
+            int delaySeconds = Math.min(durationSeconds - 1,
+                    (int) Math.floor((double) stepIndex * rampWindowSeconds / stepCount));
+            int activeDurationSeconds = Math.max(1, durationSeconds - delaySeconds);
+            specs.add(new ThreadGroupSpec(
+                    sceneName + "-step-" + (stepIndex + 1),
+                    threadsForStep,
+                    1,
+                    delaySeconds,
+                    activeDurationSeconds
+            ));
+        }
+
+        return specs;
+    }
+
+    private ThreadGroup createThreadGroup(ThreadGroupSpec spec) {
+        ThreadGroup threadGroup = new ThreadGroup();
+        threadGroup.setName(spec.name());
+        threadGroup.setNumThreads(spec.threads());
+        threadGroup.setRampUp(spec.rampUpSeconds());
+        threadGroup.setScheduler(true);
+        threadGroup.setDuration(spec.durationSeconds());
+        threadGroup.setDelay(spec.delaySeconds());
+        threadGroup.setSamplerController(createLoopController());
+        return threadGroup;
+    }
+
+    private ConfigTestElement createHttpDefaults(String protocol, String domain, int port) {
         ConfigTestElement httpDefaults = new ConfigTestElement();
         httpDefaults.setName("HTTP Request Defaults");
         httpDefaults.setProperty(TestElement.TEST_CLASS, ConfigTestElement.class.getName());
@@ -84,56 +179,22 @@ public class JmeterTestPlanBuilder {
         httpDefaults.setProperty(HTTPSamplerBase.DOMAIN, domain);
         httpDefaults.setProperty(HTTPSamplerBase.PORT, String.valueOf(port));
         httpDefaults.setProperty(HTTPSamplerBase.CONTENT_ENCODING, "UTF-8");
-
-        // ====================== 4. 创建 HTTP 请求采样器（核心：发送请求） ======================
-        List<HTTPSamplerProxy> httpSamplerList = new ArrayList<HTTPSamplerProxy>();
-        // TODO step.weight权重未处理
-        for(TestSceneStep step : steps){
-            HTTPSamplerProxy httpSampler = createHTTPSampler(step);
-            httpSamplerList.add(httpSampler);
-        }
-
-
-        // ====================== 5. 创建监听器（Listener：收集结果） ======================
-        resultCollector.setName("汇总报告");
-        resultCollector.setFilename(Paths.get(jmeterConfig.getResultsDir(), "run_"+taskRun.getId()+".jtl").toString());
-
-        // ====================== 6. 组装 HashTree（核心：构建层级结构） ======================
-        // JMeter 的执行是基于 HashTree 的层级结构，顺序为：TestPlan → ThreadGroup → 子元素
-        ListedHashTree testPlanTree = new ListedHashTree();
-
-        // 1. 先把 TestPlan 加到根节点
-        testPlanTree.add(testPlan);
-
-        // 2. 把 ThreadGroup 加到 TestPlan 的子节点
-        ListedHashTree threadGroupTree = testPlanTree.getTree(testPlan);
-        threadGroupTree.add(threadGroup);
-
-        // 3. 把 HTTP默认值、HTTP采样器、监听器 加到 ThreadGroup 的子节点
-        ListedHashTree samplerTree = threadGroupTree.getTree(threadGroup);
-        samplerTree.add(httpDefaults); // 先加默认值（采样器会继承默认值的配置）
-        // 再加采样器
-        for(HTTPSamplerProxy httpSampler : httpSamplerList){
-            samplerTree.add(httpSampler);
-        }
-        samplerTree.add(resultCollector); // 最后加监听器
-
-        return testPlanTree;
+        return httpDefaults;
     }
 
     /*
-    * 创建http采样器
-    * */
+     * 创建http采样器
+     * */
     @NotNull
     private static HTTPSamplerProxy createHTTPSampler(TestSceneStep step) {
         HTTPSamplerProxy httpSampler = new HTTPSamplerProxy();
         httpSampler.setName(step.getName());
         httpSampler.setProperty(TestElement.TEST_CLASS, HTTPSamplerProxy.class.getName());
         httpSampler.setProperty(TestElement.GUI_CLASS, HttpTestSampleGui.class.getName());
-        httpSampler.setPath(step.getPath()); // 请求路径：根路径（因为默认值里已经配了域名，这里只写路径）
-        httpSampler.setMethod(step.getMethod()); // 请求方法：GET
-        httpSampler.setFollowRedirects(true); // 跟随重定向：是
-        httpSampler.setUseKeepAlive(true); // 保持连接：是（提升性能）
+        httpSampler.setPath(step.getPath());
+        httpSampler.setMethod(step.getMethod());
+        httpSampler.setFollowRedirects(true);
+        httpSampler.setUseKeepAlive(true);
         return httpSampler;
     }
 
@@ -144,12 +205,20 @@ public class JmeterTestPlanBuilder {
     private LoopController createLoopController() {
         LoopController loopController = new LoopController();
         loopController.setName("循环控制器");
-        loopController.setLoops(-1); // 循环次数：-1 表示永久循环（由线程组的 duration 控制结束）
-        loopController.setContinueForever(true); // 永久循环：是
+        loopController.setLoops(-1);
+        loopController.setContinueForever(true);
         loopController.setProperty(TestElement.TEST_CLASS, LoopController.class.getName());
         loopController.setProperty(TestElement.GUI_CLASS, LoopControlPanel.class.getName());
-        loopController.initialize(); // 必须初始化！
+        loopController.initialize();
         return loopController;
     }
 
+    private record ThreadGroupSpec(
+            String name,
+            int threads,
+            int rampUpSeconds,
+            int delaySeconds,
+            int durationSeconds
+    ) {
+    }
 }

@@ -1,0 +1,39 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: yuan-monitor
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/yuan_monitor?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:Lqy147258369}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:consumer}
+    password: ${RABBITMQ_PASSWORD:123456}
+    virtual-host: ${RABBITMQ_VHOST:test_monitor}
+  task:
+    scheduling:
+      pool:
+        size: 4
+yuan:
+  monitor:
+    system-metrics:
+      sample-interval-ms: 200
+      flush-interval-ms: 500
+      heartbeat-interval-ms: 1000
+      tracking-grace-seconds: 0
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true

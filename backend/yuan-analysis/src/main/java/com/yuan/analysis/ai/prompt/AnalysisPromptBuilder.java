@@ -48,7 +48,7 @@ public class AnalysisPromptBuilder {
 
     private String renderAiRules(AiAnalysisInput input) {
         if (input.getAiRules() == null || input.getAiRules().isEmpty()) {
-            return "- 当前用户没有启用额外 AI 规则，请仅基于结构化快照和规则命中结果进行解释。";
+            return "- 当前用户没有启用额外 AI 规则。";
         }
         return input.getAiRules().stream()
                 .map(this::renderAiRule)

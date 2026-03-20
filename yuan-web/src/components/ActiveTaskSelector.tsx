@@ -12,14 +12,6 @@ interface ActiveTaskSelectorProps {
   width?: number;
 }
 
-const statusColorMap: Record<string, string> = {
-  RUNNING: "green",
-  SUCCESS: "blue",
-  FAILED: "red",
-  STOPPED: "default",
-  PENDING: "gold"
-};
-
 function ActiveTaskSelector({ label, tasks, value, loading, onChange, width = 300 }: ActiveTaskSelectorProps) {
   const { t } = useTranslation();
 
@@ -32,28 +24,6 @@ function ActiveTaskSelector({ label, tasks, value, loading, onChange, width = 30
       })),
     [tasks]
   );
-
-  const renderStatus = (status?: string) => {
-    if (!status) {
-      return "--";
-    }
-    if (status === "RUNNING") {
-      return t("common.statusRunning");
-    }
-    if (status === "PENDING") {
-      return t("common.statusPending");
-    }
-    if (status === "SUCCESS") {
-      return t("common.statusSuccess");
-    }
-    if (status === "FAILED") {
-      return t("common.statusFailed");
-    }
-    if (status === "STOPPED") {
-      return t("common.statusStopped");
-    }
-    return status;
-  };
 
   return (
     <Space direction="vertical" size={6}>
@@ -71,9 +41,7 @@ function ActiveTaskSelector({ label, tasks, value, loading, onChange, width = 30
       {currentTask ? (
         <Space wrap>
           <Tag color="blue">#{currentTask.id}</Tag>
-          <Tag>{currentTask.planName}</Tag>
           <Tag>{currentTask.sceneName || "--"}</Tag>
-          <Tag color={statusColorMap[currentTask.status] ?? "default"}>{renderStatus(currentTask.status)}</Tag>
         </Space>
       ) : (
         <Typography.Text type="secondary">{t("common.noData")}</Typography.Text>

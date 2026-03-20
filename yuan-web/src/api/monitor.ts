@@ -1,4 +1,13 @@
-import type { ActiveAlert, AlertRecord, AlertRule, AlertRulePayload, MetricsSummary, SystemMetric } from "../types/monitor";
+import type {
+  ActiveAlert,
+  AlertRecord,
+  AlertRule,
+  AlertRulePayload,
+  MetricsSummary,
+  RunSystemMetricPoint,
+  RunSystemMetricSummary,
+  SystemMetric
+} from "../types/monitor";
 import { request } from "../utils/request";
 
 export const getSystemMetricsApi = async (): Promise<SystemMetric> => {
@@ -8,6 +17,16 @@ export const getSystemMetricsApi = async (): Promise<SystemMetric> => {
 
 export const getMetricsSummaryApi = async (): Promise<MetricsSummary> => {
   const response = await request.get("/monitor/metrics-summary");
+  return response.data.data;
+};
+
+export const getRunSystemMetricSummaryApi = async (runId: number): Promise<RunSystemMetricSummary> => {
+  const response = await request.get(`/monitor/system-metrics/runs/${runId}/summary`);
+  return response.data.data;
+};
+
+export const getRunSystemMetricPointsApi = async (runId: number): Promise<RunSystemMetricPoint[]> => {
+  const response = await request.get(`/monitor/system-metrics/runs/${runId}/points`);
   return response.data.data;
 };
 

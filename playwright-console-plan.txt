@@ -1,0 +1,185 @@
+Total messages: 14 (Errors: 8, Warnings: 2)
+Returning 12 messages for level "info"
+
+[INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:21608
+[INFO] 🌐 i18next is maintained with support from Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙 @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-TL4TGAVB.js?v=3c8d1ad3:1780
+[ERROR] Warning: [antd: Spin] `tip` only work in nest or fullscreen pattern. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-ZDBJOGHJ.js?v=3c8d1ad3:1247
+[WARNING] ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4435
+[WARNING] ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. @ http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4435
+[ERROR] The above error occurred in the <Cell2> component:
+
+    at Cell2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77862:5)
+    at tr
+    at BodyRow (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:78276:5)
+    at ImmutableComponent2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77666:7)
+    at tbody
+    at Body (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:78398:5)
+    at ImmutableComponent2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77666:7)
+    at table
+    at div
+    at div
+    at div
+    at Provider2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77560:22)
+    at Table (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:79420:31)
+    at ImmutableComponent2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77638:37)
+    at div
+    at div
+    at Spin (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:68195:16)
+    at div
+    at InternalTable (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:86196:16)
+    at Table2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:86555:35)
+    at div
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:46460:16
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:51775:16
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:51917:16
+    at div
+    at TestPlanPage (http://127.0.0.1:5173/src/pages/test/plan/index.tsx:45:29)
+    at Suspense
+    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4131:5)
+    at Outlet (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4537:26)
+    at main
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:66323:16
+    at Content
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:66342:16
+    at Layout
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:66342:16
+    at Layout
+    at MainLayout (http://127.0.0.1:5173/src/layouts/MainLayout.tsx:52:20)
+    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4131:5)
+    at Outlet (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4537:26)
+    at Protected (http://127.0.0.1:5173/src/router/index.tsx:199:24)
+    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4131:5)
+    at AppRouter (http://127.0.0.1:5173/src/router/index.tsx:220:10)
+    at div
+    at App (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:21025:16)
+    at LocaleProvider (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:3754:13)
+    at MotionWrapper (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:6288:32)
+    at ProviderChildren (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:6396:5)
+    at ConfigProvider (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:6687:27)
+    at App (http://127.0.0.1:5173/src/App.tsx:31:20)
+    at Router (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4544:15)
+    at BrowserRouter (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:5290:5)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14079
+[ERROR] The above error occurred in the <Cell2> component:
+
+    at Cell2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77862:5)
+    at tr
+    at BodyRow (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:78276:5)
+    at ImmutableComponent2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77666:7)
+    at tbody
+    at Body (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:78398:5)
+    at ImmutableComponent2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77666:7)
+    at table
+    at div
+    at div
+    at div
+    at Provider2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77560:22)
+    at Table (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:79420:31)
+    at ImmutableComponent2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77638:37)
+    at div
+    at div
+    at Spin (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:68195:16)
+    at div
+    at InternalTable (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:86196:16)
+    at Table2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:86555:35)
+    at div
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:46460:16
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:51775:16
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:51917:16
+    at div
+    at TestPlanPage (http://127.0.0.1:5173/src/pages/test/plan/index.tsx:45:29)
+    at Suspense
+    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4131:5)
+    at Outlet (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4537:26)
+    at main
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:66323:16
+    at Content
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:66342:16
+    at Layout
+    at div
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:66342:16
+    at Layout
+    at MainLayout (http://127.0.0.1:5173/src/layouts/MainLayout.tsx:52:20)
+    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4131:5)
+    at Outlet (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4537:26)
+    at Protected (http://127.0.0.1:5173/src/router/index.tsx:199:24)
+    at RenderedRoute (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4131:5)
+    at AppRouter (http://127.0.0.1:5173/src/router/index.tsx:220:10)
+    at div
+    at App (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:21025:16)
+    at LocaleProvider (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:3754:13)
+    at MotionWrapper (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:6288:32)
+    at ProviderChildren (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:6396:5)
+    at ConfigProvider (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:6687:27)
+    at App (http://127.0.0.1:5173/src/App.tsx:31:20)
+    at Router (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:4544:15)
+    at BrowserRouter (http://127.0.0.1:5173/node_modules/.vite/deps/react-router-dom.js?v=3c8d1ad3:5290:5)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14079
+TypeError: Cannot read properties of undefined (reading 'length')
+    at render (http://127.0.0.1:5173/src/pages/test/plan/index.tsx:194:40)
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77795:24
+    at useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-ZDBJOGHJ.js?v=3c8d1ad3:2511:30)
+    at useCellRender2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77786:17)
+    at Cell2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77867:24)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14630:28)
+    at updateSimpleMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14511:18)
+    at updateMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14414:22)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:16025:22)
+TypeError: Cannot read properties of undefined (reading 'length')
+    at render (http://127.0.0.1:5173/src/pages/test/plan/index.tsx:194:40)
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77795:24
+    at useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-ZDBJOGHJ.js?v=3c8d1ad3:2511:30)
+    at useCellRender2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77786:17)
+    at Cell2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77867:24)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14630:28)
+    at updateSimpleMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14511:18)
+    at updateMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14414:22)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:16025:22)
+TypeError: Cannot read properties of undefined (reading 'length')
+    at render (http://127.0.0.1:5173/src/pages/test/plan/index.tsx:194:40)
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77795:24
+    at useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-ZDBJOGHJ.js?v=3c8d1ad3:2511:30)
+    at useCellRender2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77786:17)
+    at Cell2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77867:24)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14630:28)
+    at updateSimpleMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14511:18)
+    at updateMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14414:22)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:16025:22)
+TypeError: Cannot read properties of undefined (reading 'length')
+    at render (http://127.0.0.1:5173/src/pages/test/plan/index.tsx:194:40)
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77795:24
+    at useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-ZDBJOGHJ.js?v=3c8d1ad3:2511:30)
+    at useCellRender2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77786:17)
+    at Cell2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77867:24)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14630:28)
+    at updateSimpleMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14511:18)
+    at updateMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14414:22)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:16025:22)
+TypeError: Cannot read properties of undefined (reading 'length')
+    at render (http://127.0.0.1:5173/src/pages/test/plan/index.tsx:194:40)
+    at http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77795:24
+    at useMemo (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-ZDBJOGHJ.js?v=3c8d1ad3:2511:30)
+    at useCellRender2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77786:17)
+    at Cell2 (http://127.0.0.1:5173/node_modules/.vite/deps/antd.js?v=3c8d1ad3:77867:24)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14630:28)
+    at updateSimpleMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14511:18)
+    at updateMemoComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:14414:22)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-NXESFFTV.js?v=3c8d1ad3:16025:22)

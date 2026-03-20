@@ -9,7 +9,7 @@ import com.yuan.monitor.entity.TestStatusRecord;
 import com.yuan.monitor.mapper.AlertRecordMapper;
 import com.yuan.monitor.mapper.AlertRuleMapper;
 import com.yuan.monitor.mapper.AlertStateMapper;
-import com.yuan.monitor.mapper.TestStatusRecordMapper;
+import com.yuan.monitor.runtime.ActiveRunRegistry;
 import com.yuan.monitor.service.AlertEvaluateService;
 import com.yuan.monitor.vo.SystemMetricVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +28,7 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
     @Autowired
     AlertStateMapper alertStateMapper;
     @Autowired
-    TestStatusRecordMapper testStatusRecordMapper;
+    ActiveRunRegistry activeRunRegistry;
 
     @Override
     public void evaluateTestMetric(TestMetricMessage message) {
@@ -47,7 +47,7 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
             AlertState state = findState(allStates, alertRule.getId());
             AlertRecord record = buildTestAlertRecord(alertRule, message);
             if (!evaluateTestRule(alertRule, message)) {
-                recoverStateIfNeeded(state, record);
+                recoverStateIfNeeded(state, record, LocalDateTime.now());
                 continue;
             }
             analysisState(state, record);
@@ -56,7 +56,15 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
 
     @Override
     public void evaluateSystemMetric(SystemMetricVO metric) {
-        TestStatusRecord runningTask = findLatestRunningTask();
+        TestStatusRecord runningTask = activeRunRegistry.findLatestRunningTask();
+        if (runningTask == null) {
+            return;
+        }
+        evaluateSystemMetric(runningTask, metric);
+    }
+
+    @Override
+    public void evaluateSystemMetric(TestStatusRecord runningTask, SystemMetricVO metric) {
         if (runningTask == null || runningTask.getUserId() == null || runningTask.getTaskId() == null || runningTask.getRunId() == null) {
             return;
         }
@@ -72,10 +80,44 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
             AlertState state = findState(allStates, alertRule.getId());
             AlertRecord record = buildSystemAlertRecord(alertRule, runningTask, metric);
             if (!evaluateSystemRule(alertRule, metric)) {
-                recoverStateIfNeeded(state, record);
+                recoverStateIfNeeded(state, record, LocalDateTime.now());
                 continue;
             }
             analysisState(state, record);
+        }
+    }
+
+    @Override
+    public void recoverAlertsOnRunFinished(TestStatusRecord statusRecord) {
+        if (statusRecord == null
+                || statusRecord.getUserId() == null
+                || statusRecord.getTaskId() == null
+                || statusRecord.getRunId() == null
+                || !isTerminalStatus(statusRecord.getStatus())) {
+            return;
+        }
+
+        List<AlertState> activeStates = listActiveStates(statusRecord.getUserId(), statusRecord.getTaskId(), statusRecord.getRunId());
+        if (activeStates.isEmpty()) {
+            return;
+        }
+
+        LocalDateTime recoveredAt = statusRecord.getCreatedAt() != null ? statusRecord.getCreatedAt() : LocalDateTime.now();
+        for (AlertState state : activeStates) {
+            AlertRule alertRule = alertRuleMapper.selectById(state.getRuleId());
+            if (alertRule == null) {
+                continue;
+            }
+
+            AlertRecord record = new AlertRecord();
+            record.setUserId(statusRecord.getUserId());
+            record.setTaskId(statusRecord.getTaskId());
+            record.setRunId(statusRecord.getRunId());
+            record.setRuleId(alertRule.getId());
+            record.setRuleName(alertRule.getName());
+            record.setLevel(alertRule.getLevel());
+            record.setCurrentValue(state.getLatestValue());
+            recoverStateIfNeeded(state, record, recoveredAt);
         }
     }
 
@@ -95,6 +137,16 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
         return alertStateMapper.selectList(wrapper);
     }
 
+    private List<AlertState> listActiveStates(Long userId, Long taskId, Long runId) {
+        LambdaQueryWrapper<AlertState> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AlertState::getUserId, userId)
+                .eq(AlertState::getTaskId, taskId)
+                .eq(AlertState::getRunId, runId)
+                .eq(AlertState::getActive, true)
+                .orderByDesc(AlertState::getCreatedAt);
+        return alertStateMapper.selectList(wrapper);
+    }
+
     private AlertState findState(List<AlertState> allStates, Long ruleId) {
         return allStates.stream()
                 .filter(state -> state.getRuleId().equals(ruleId))
@@ -102,11 +154,12 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
                 .orElse(null);
     }
 
-    private void recoverStateIfNeeded(AlertState state, AlertRecord record) {
+    private void recoverStateIfNeeded(AlertState state, AlertRecord record, LocalDateTime recoveredAt) {
         if (state != null && Boolean.TRUE.equals(state.getActive())) {
             state.setActive(false);
-            state.setLatestRecoveredAt(LocalDateTime.now());
+            state.setLatestRecoveredAt(recoveredAt);
             record.setEventType("RECOVER");
+            record.setCreatedAt(recoveredAt);
             alertStateMapper.updateById(state);
             alertRecordMapper.insert(record);
         }
@@ -120,28 +173,8 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
         return "CPU".equals(rule.getMetric()) || "MEMORY".equals(rule.getMetric());
     }
 
-    private TestStatusRecord findLatestRunningTask() {
-        LambdaQueryWrapper<TestStatusRecord> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(TestStatusRecord::getStatus, "RUNNING")
-                .orderByDesc(TestStatusRecord::getCreatedAt)
-                .last("limit 20");
-
-        List<TestStatusRecord> runningCandidates = testStatusRecordMapper.selectList(wrapper);
-        for (TestStatusRecord candidate : runningCandidates) {
-            if (candidate.getRunId() == null) {
-                continue;
-            }
-
-            LambdaQueryWrapper<TestStatusRecord> latestWrapper = new LambdaQueryWrapper<>();
-            latestWrapper.eq(TestStatusRecord::getRunId, candidate.getRunId())
-                    .orderByDesc(TestStatusRecord::getCreatedAt)
-                    .last("limit 1");
-            TestStatusRecord latestStatus = testStatusRecordMapper.selectOne(latestWrapper);
-            if (latestStatus != null && "RUNNING".equals(latestStatus.getStatus())) {
-                return latestStatus;
-            }
-        }
-        return null;
+    private boolean isTerminalStatus(String status) {
+        return "SUCCESS".equals(status) || "FAILED".equals(status) || "STOPPED".equals(status);
     }
 
     private void analysisState(AlertState state, AlertRecord record) {
@@ -155,6 +188,7 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
             state.setLatestValue(record.getCurrentValue());
             state.setLatestTriggeredAt(LocalDateTime.now());
             record.setEventType("TRIGGER");
+            record.setCreatedAt(LocalDateTime.now());
             alertStateMapper.insert(state);
             alertRecordMapper.insert(record);
             return;
@@ -165,6 +199,7 @@ public class AlertEvaluateServiceImpl implements AlertEvaluateService {
             state.setLatestValue(record.getCurrentValue());
             state.setLatestTriggeredAt(LocalDateTime.now());
             record.setEventType("TRIGGER");
+            record.setCreatedAt(LocalDateTime.now());
             alertStateMapper.updateById(state);
             alertRecordMapper.insert(record);
             return;

@@ -5,6 +5,8 @@ import com.yuan.test.entity.TestPlan;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 public class TestPlanVO {
@@ -22,7 +24,10 @@ public class TestPlanVO {
 
     private LocalDateTime createdAt;
 
-    // 静态方法来将实体类转换为VO
+    private Integer taskCount = 0;
+
+    private List<String> relatedSceneNames = new ArrayList<>();
+
     public static TestPlanVO fromEntity(TestPlan testPlan) {
         TestPlanVO vo = new TestPlanVO();
         vo.setId(testPlan.getId());

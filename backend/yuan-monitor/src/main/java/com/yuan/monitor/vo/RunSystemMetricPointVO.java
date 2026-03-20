@@ -10,9 +10,21 @@ public class RunSystemMetricPointVO {
     /** 采样时间 */
     private LocalDateTime ts;
 
-    /** 当前秒 CPU 使用率 */
+    /** 当前秒 CPU 平均使用率 */
     private BigDecimal cpu;
 
-    /** 当前秒内存使用率 */
+    /** 当前秒 CPU 峰值使用率 */
+    private BigDecimal cpuMax;
+
+    /** 当前秒内存平均使用率 */
     private BigDecimal memory;
+
+    /** 当前秒内存峰值使用率 */
+    private BigDecimal memoryMax;
+
+    /** 该秒聚合到的原始样本数 */
+    private Integer sampleCount;
+
+    /** 是否为空桶（该秒没有采到有效资源样本） */
+    private Boolean missing;
 }

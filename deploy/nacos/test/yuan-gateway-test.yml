@@ -1,0 +1,42 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: yuan-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: auth-service
+              uri: lb://yuan-auth
+              predicates:
+                - Path=/auth/**
+            - id: test-service
+              uri: lb://yuan-test
+              predicates:
+                - Path=/test/**
+            - id: monitor-http-service
+              uri: lb://yuan-monitor
+              predicates:
+                - Path=/monitor/**
+            - id: monitor-ws-service
+              uri: lb:ws://yuan-monitor
+              predicates:
+                - Path=/ws/**
+            - id: analysis-service
+              uri: lb://yuan-analysis
+              predicates:
+                - Path=/analysis/**
+            - id: report-service
+              uri: lb://yuan-report
+              predicates:
+                - Path=/report/**
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:Lqy147258369}

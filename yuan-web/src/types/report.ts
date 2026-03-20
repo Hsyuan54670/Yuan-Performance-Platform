@@ -1,14 +1,13 @@
-export interface ReportItem {
+import type { Grade } from "./analysis";
+
+export interface ReportSummary {
   id: number;
   taskId: number;
-  title: string;
+  runId: number;
   createdAt: string;
-  grade: "A" | "B" | "C" | "D" | "E";
+  grade: Grade;
+  score: number;
+  status: string;
+  source: string;
   summary: string;
-}
-
-export interface ComparePoint {
-  label: string;
-  baseline: number;
-  current: number;
 }

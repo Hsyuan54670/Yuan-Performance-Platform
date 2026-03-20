@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 @Data
 public class TaskRuntimeContext {
 
+    private Long userId;
+
     private Long taskId;
 
     private Long runId;

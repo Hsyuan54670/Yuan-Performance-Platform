@@ -24,68 +24,55 @@ import com.yuan.test.mapper.TestSceneMapper;
 import com.yuan.test.mapper.TestSceneStepMapper;
 import com.yuan.test.mapper.TestTaskMapper;
 import com.yuan.test.mapper.TestTaskRunMapper;
-import com.yuan.test.mq.TestCompletedProducer;
 import com.yuan.test.mq.TestStatusProducer;
 import com.yuan.test.service.TestTaskService;
 import com.yuan.test.vo.TestMetricVO;
+import com.yuan.test.vo.TestTaskRunVO;
 import com.yuan.test.vo.TestTaskVO;
 import org.apache.jorphan.collections.ListedHashTree;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
 public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> implements TestTaskService {
-    private final TestStatusProducer tsProducer;
-    private final TestTaskRunMapper ttrMapper;
-    private final TaskMetricAggregator taskMetricAggregator;
-    private final TestSceneStepMapper tssMapper;
-    private final TestSceneMapper tsMapper;
-    private final TestPlanMapper tpMapper;
-    private final TestMetricSecondMapper tmsMapper;
-    private final JmeterTestPlanBuilder jmeterTestPlanBuilder;
-    private final JmeterExecutionManager jmeterExecutionManager;
-
     @Autowired
-    private TestCompletedProducer tcProducer;
+    TestPlanMapper tpMapper;
     @Autowired
-    private TestTaskMapper ttMapper;
-
-    public TestTaskServiceImpl(TestStatusProducer tsProducer, TestSceneMapper tsMapper, TestPlanMapper tpMapper, TestMetricSecondMapper tsmMapper, JmeterTestPlanBuilder jmeterTestPlanBuilder, JmeterExecutionManager jmeterExecutionManager, TestSceneStepMapper testSceneStepMapper, TaskMetricAggregator taskMetricAggregator, TestTaskRunMapper testTaskRunMapper) {
-        this.tsProducer = tsProducer;
-        this.tsMapper = tsMapper;
-        this.tpMapper = tpMapper;
-        this.tmsMapper = tsmMapper;
-        this.jmeterTestPlanBuilder = jmeterTestPlanBuilder;
-        this.jmeterExecutionManager = jmeterExecutionManager;
-        this.tssMapper = testSceneStepMapper;
-        this.taskMetricAggregator = taskMetricAggregator;
-        this.ttrMapper = testTaskRunMapper;
-    }
+    TestSceneMapper tsMapper;
+    @Autowired
+    TestSceneStepMapper tssMapper;
+    @Autowired
+    TestTaskMapper ttMapper;
+    @Autowired
+    TestTaskRunMapper ttrMapper;
+    @Autowired
+    TestMetricSecondMapper tmsMapper;
+    @Autowired
+    JmeterTestPlanBuilder jmeterTestPlanBuilder;
+    @Autowired
+    JmeterExecutionManager jmeterExecutionManager;
+    @Autowired
+    TaskMetricAggregator taskMetricAggregator;
+    @Autowired
+    TestStatusProducer tsProducer;
 
     @Override
     public R<List<TestTaskVO>> tasks(Long userId) {
-        List<TestTask> list = this.lambdaQuery()
-                .eq(TestTask::getUserId, userId)
-                .orderByDesc(TestTask::getCreatedAt)
-                .list();
+        LambdaQueryWrapper<TestTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TestTask::getUserId, userId)
+                .orderByDesc(TestTask::getCreatedAt);
+        List<TestTask> list = this.list(wrapper);
 
         list.forEach(task -> {
-            var scene = tsMapper.selectById(task.getSceneId());
-            var plan = tpMapper.selectById(task.getPlanId());
-            if (scene != null) {
-                task.setSceneName(scene.getName());
-            } else {
-                task.setSceneName("场景已删除");
-            }
-            if (plan != null) {
-                task.setPlanName(plan.getName());
-            } else {
-                task.setPlanName("计划已删除");
-            }
+            TestScene scene = tsMapper.selectById(task.getSceneId());
+            TestPlan plan = tpMapper.selectById(task.getPlanId());
+            task.setSceneName(scene != null ? scene.getName() : "场景已删除");
+            task.setPlanName(plan != null ? plan.getName() : "计划已删除");
         });
 
         List<TestTaskVO> taskVOList = list.stream().map(TestTaskVO::fromEntity).toList();
@@ -126,10 +113,10 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
                 null,
                 id,
                 "RUNNING",
-                now,
                 null,
-                LocalDateTime.now(),
-                LocalDateTime.now()
+                null,
+                now,
+                now
         );
         ttrMapper.insert(taskRun);
         taskMetricAggregator.registerRunOwner(taskRun.getId(), userId);
@@ -137,7 +124,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         ListedHashTree testPlanTree;
         TaskResultCollector resultCollector = new TaskResultCollector(taskMetricAggregator, id, taskRun.getId());
         try {
-            testPlanTree = jmeterTestPlanBuilder.build(plan, scene, testTask, steps, resultCollector,taskRun);
+            testPlanTree = jmeterTestPlanBuilder.build(plan, scene, testTask, steps, resultCollector, taskRun);
         } catch (Exception e) {
             taskMetricAggregator.markRunFinished(taskRun.getId());
             taskRun.setStatus("FAILED");
@@ -147,7 +134,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
             this.updateById(testTask);
             ttrMapper.updateById(taskRun);
             tsProducer.send(userId, id, taskRun.getId(), "FAILED", "任务启动失败");
-            return R.fail(500, "JMeter启动失败");
+            return R.fail(HttpStatus.INTERNAL_SERVER_ERROR, "JMeter启动失败");
         }
 
         boolean started;
@@ -161,7 +148,6 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
             testTask.setEndTime(LocalDateTime.now());
             this.updateById(testTask);
             ttrMapper.updateById(taskRun);
-
             tsProducer.send(userId, id, taskRun.getId(), "FAILED", "JMeter启动失败");
             return R.fail(HttpStatus.INTERNAL_SERVER_ERROR, "JMeter启动失败");
         }
@@ -170,12 +156,11 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
             return R.fail(HttpStatus.CONFLICT, "任务正在运行中");
         }
 
+        // 这里先把任务状态切到 RUNNING，但真正的开始时间以后台执行线程发出的 RUNNING 事件为准。
         testTask.setStatus("RUNNING");
-        testTask.setStartTime(now);
+        testTask.setStartTime(null);
         testTask.setEndTime(null);
         this.updateById(testTask);
-
-        tsProducer.send(userId, id, taskRun.getId(), "RUNNING", "任务开始执行");
         return R.success();
     }
 
@@ -192,7 +177,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         LambdaQueryWrapper<TestTaskRun> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(TestTaskRun::getTaskId, id)
                 .eq(TestTaskRun::getStatus, "RUNNING")
-                .orderByDesc(TestTaskRun::getStartTime)
+                .orderByDesc(TestTaskRun::getCreatedAt)
                 .last("limit 1");
         TestTaskRun taskRun = ttrMapper.selectOne(wrapper);
 
@@ -201,22 +186,15 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         }
 
         if (!"RUNNING".equals(testTask.getStatus())) {
-            return R.fail(HttpStatus.CONFLICT, "未运行状态不可停止");
-        }
-        if (!jmeterExecutionManager.stop(id)) {
-            return R.fail(HttpStatus.CONFLICT, "当前任务未在执行中");
+            return R.fail(HttpStatus.CONFLICT, "当前任务未在运行");
         }
 
-        taskMetricAggregator.markRunFinished(taskRun.getId());
-        taskRun.setStatus("STOPPED");
-        taskRun.setEndTime(LocalDateTime.now());
-        ttrMapper.updateById(taskRun);
-        testTask.setStatus("STOPPED");
-        testTask.setEndTime(LocalDateTime.now());
-        this.updateById(testTask);
+        boolean stopped = jmeterExecutionManager.stop(id);
+        if (!stopped) {
+            return R.fail(HttpStatus.CONFLICT, "当前任务未在运行");
+        }
 
-        tsProducer.send(userId, id, taskRun.getId(), "STOPPED", "任务被用户停止");
-        tcProducer.send(userId, id, taskRun.getId(), "STOPPED");
+        // STOPPED 状态和完成事件统一由执行管理器在 JMeter 真正退出时落库并发送，避免提前结束资源跟踪窗口。
         return R.success();
     }
 
@@ -224,6 +202,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
     public R<Long> create(TestTaskCreateDTO request, Long userId) {
         Long sceneId = request.getSceneId();
         Long planId = request.getPlanId();
+
         TestScene testScene = tsMapper.selectById(sceneId);
         if (testScene == null) {
             return R.fail(HttpStatus.NOT_FOUND, "场景不存在");
@@ -231,6 +210,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         if (!testScene.getUserId().equals(userId)) {
             return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
         }
+
         TestPlan testPlan = tpMapper.selectById(planId);
         if (testPlan == null) {
             return R.fail(HttpStatus.NOT_FOUND, "计划不存在");
@@ -246,9 +226,9 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         testTask.setStatus("PENDING");
         testTask.setCreatedAt(LocalDateTime.now());
         testTask.setDuration(0);
-        testTask.setQps(BigDecimal.valueOf(0));
-        testTask.setP99(BigDecimal.valueOf(0));
-        testTask.setErrorRate(BigDecimal.valueOf(0));
+        testTask.setQps(BigDecimal.ZERO);
+        testTask.setP99(BigDecimal.ZERO);
+        testTask.setErrorRate(BigDecimal.ZERO);
         testTask.setStartTime(null);
         testTask.setEndTime(null);
         this.save(testTask);
@@ -256,6 +236,26 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         return R.success(testTask.getId());
     }
 
+    @Override
+    public R<List<TestTaskRunVO>> runs(Long taskId, Long userId) {
+        TestTask testTask = this.getById(taskId);
+        if (testTask == null) {
+            return R.fail(HttpStatus.NOT_FOUND, "任务不存在");
+        }
+        if (!testTask.getUserId().equals(userId)) {
+            return R.fail(HttpStatus.FORBIDDEN, "没有权限操作");
+        }
+
+        LambdaQueryWrapper<TestTaskRun> runWrapper = new LambdaQueryWrapper<>();
+        runWrapper.eq(TestTaskRun::getTaskId, taskId)
+                .orderByDesc(TestTaskRun::getCreatedAt)
+                .orderByDesc(TestTaskRun::getId);
+
+        List<TestTaskRunVO> runs = ttrMapper.selectList(runWrapper).stream()
+                .map(TestTaskRunVO::fromEntity)
+                .toList();
+        return R.success(runs);
+    }
     @Override
     public R<List<TestMetricVO>> metrics(Long id, Long userId) {
         TestTask testTask = this.getById(id);
@@ -407,7 +407,7 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         BigDecimal avgQps = metrics.stream()
                 .map(TestMetricSecond::getQps)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .divide(BigDecimal.valueOf(metrics.size()), 2, BigDecimal.ROUND_HALF_UP);
+                .divide(BigDecimal.valueOf(metrics.size()), 2, RoundingMode.HALF_UP);
 
         TestMetricSecond lastMetric = metrics.get(metrics.size() - 1);
         baseline.setAvgQps(avgQps);
@@ -416,4 +416,6 @@ public class TestTaskServiceImpl extends ServiceImpl<TestTaskMapper, TestTask> i
         return baseline;
     }
 }
+
+
 

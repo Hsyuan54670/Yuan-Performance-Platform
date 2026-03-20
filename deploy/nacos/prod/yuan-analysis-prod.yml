@@ -1,0 +1,46 @@
+server:
+  port: 8084
+spring:
+  application:
+    name: yuan-analysis
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/yuan_analysis?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:Lqy147258369}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:consumer}
+    password: ${RABBITMQ_PASSWORD:123456}
+    virtual-host: ${RABBITMQ_VHOST:test_monitor}
+  thymeleaf:
+    cache: true
+  ai:
+    openai:
+      api-key: ${ARK_API_KEY:}
+      base-url: ${AI_BASE_URL:https://ark.cn-beijing.volces.com/api/v3}
+      chat:
+        completions-path: ${AI_COMPLETIONS_PATH:/chat/completions}
+        options:
+          model: ${AI_MODEL:ep-20260317211854-4lghj}
+          temperature: 0.3
+          reasoning-effort: high
+yuan:
+  analysis:
+    ai:
+      enabled: true
+      provider: fallback
+      max-score-adjustment: 6
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true

@@ -1,0 +1,71 @@
+services:
+  mysql:
+    image: mysql:8.0.36
+    container_name: yuan-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      TZ: Asia/Shanghai
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - yuan_mysql_data:/var/lib/mysql
+      - ../sql/00-create-databases.sql:/docker-entrypoint-initdb.d/00-create-databases.sql:ro
+      - ../sql/01-schema-v1.sql:/docker-entrypoint-initdb.d/01-schema-v1.sql:ro
+      - ../sql/02-seed-v1.sql:/docker-entrypoint-initdb.d/02-seed-v1.sql:ro
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: yuan-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "Lqy147258369"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - yuan_redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: yuan-rabbitmq
+    restart: unless-stopped
+    hostname: yuan-rabbitmq
+    entrypoint: ["/bin/bash", "-lc"]
+    command: >
+      rabbitmq-server &
+      pid=$$!;
+      until rabbitmq-diagnostics -q ping; do sleep 2; done;
+      rabbitmqctl add_vhost test_monitor 2>/dev/null || true;
+      rabbitmqctl add_user admin 123456 2>/dev/null || true;
+      rabbitmqctl set_user_tags admin administrator;
+      rabbitmqctl set_permissions -p / admin ".*" ".*" ".*";
+      rabbitmqctl set_permissions -p test_monitor admin ".*" ".*" ".*";
+      rabbitmqctl add_user producer 123456 2>/dev/null || true;
+      rabbitmqctl set_permissions -p test_monitor producer ".*" ".*" ".*";
+      rabbitmqctl add_user consumer 123456 2>/dev/null || true;
+      rabbitmqctl set_permissions -p test_monitor consumer ".*" ".*" ".*";
+      wait $$pid
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: yuan-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 256m
+      JVM_XMX: 256m
+      JVM_XMN: 128m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+
+volumes:
+  yuan_mysql_data:
+  yuan_redis_data:

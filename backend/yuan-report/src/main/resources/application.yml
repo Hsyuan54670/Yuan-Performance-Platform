@@ -1,0 +1,16 @@
+server:
+  port: 8085
+spring:
+  application:
+    name: yuan-report
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 172.23.80.90:8848
+  data:
+    redis:
+      host: 172.23.80.90
+      port: 6379
+      password: Lqy147258369
+  thymeleaf:
+    cache: false

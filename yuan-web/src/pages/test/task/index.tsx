@@ -1,24 +1,34 @@
-import { PauseCircleOutlined, PlayCircleOutlined, ReloadOutlined, WifiOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Row, Space, Statistic, Table, Tag, Typography, message } from "antd";
+import { PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, WifiOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Empty, Row, Space, Statistic, Tag, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { getAnalysisReportByRunApi } from "../../../api/analysis";
 import { getSystemMetricsApi } from "../../../api/monitor";
-import { listTasksApi, startTaskApi, stopTaskApi } from "../../../api/test";
+import { listTaskRunsApi, listTasksApi, runMetricsApi, startTaskApi, stopTaskApi } from "../../../api/test";
+import ActiveRunSelector from "../../../components/ActiveRunSelector";
 import ActiveTaskSelector from "../../../components/ActiveTaskSelector";
-import LazyEChart from "../../../components/LazyEChart";
 import PerformanceChart from "../../../components/PerformanceChart";
 import RealtimeMetricsPanel from "../../../components/RealtimeMetricsPanel";
+import { useAuth } from "../../../hooks/useAuth";
 import { useWebSocket } from "../../../hooks/useWebSocket";
 import { useAppStore } from "../../../store/appStore";
+import type { AnalysisReport } from "../../../types/analysis";
 import type { SystemMetric } from "../../../types/monitor";
-import type { TaskStatusPushMessage, TestTask } from "../../../types/test";
-import { formatDateTime, formatPercent } from "../../../utils/format";
+import type { TaskStatusPushMessage, TestTask, TestTaskRun } from "../../../types/test";
+import { formatDateTime } from "../../../utils/format";
+import { PermissionCodes } from "../../../utils/permissions";
 import { getRequestErrorMessage } from "../../../utils/request";
-import { resolveActiveTaskId } from "../../../utils/taskSelection";
+import { renderTaskStatus, taskStatusColorMap } from "../../../utils/taskStatus";
+import { resolveActiveRunId, resolveActiveTaskId } from "../../../utils/taskSelection";
 
 function TestTaskPage() {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<TestTask[]>([]);
+  const [runs, setRuns] = useState<TestTaskRun[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [report, setReport] = useState<AnalysisReport | null>(null);
   const [sysMetric, setSysMetric] = useState<SystemMetric>({
     cpu: 0,
     memory: 0,
@@ -26,11 +36,14 @@ function TestTaskPage() {
     networkIn: 0,
     networkOut: 0
   });
-  const { activeTaskId, setActiveTaskId } = useAppStore();
-  const activeTask = tasks.find((item) => item.id === activeTaskId) || tasks[0];
-  const realtimeResetKey = `${activeTaskId}-${activeTask?.startTime ?? "idle"}`;
+  const { activeTaskId, activeRunId, setActiveTaskId, setActiveRunId } = useAppStore();
   const previousTransportRef = useRef<"websocket" | "polling" | "disconnected">("disconnected");
   const { t } = useTranslation();
+  const { hasPermission } = useAuth();
+  const canCreateTask = hasPermission(PermissionCodes.TEST_TASK_CREATE);
+  const canStartTask = hasPermission(PermissionCodes.TEST_TASK_START);
+  const canStopTask = hasPermission(PermissionCodes.TEST_TASK_STOP);
+  const canViewAnalysisReport = hasPermission(PermissionCodes.ANALYSIS_REPORT_VIEW);
 
   const loadTasks = useCallback(
     async (silent = false) => {
@@ -41,7 +54,12 @@ function TestTaskPage() {
         const resp = await listTasksApi();
         setTasks(resp);
         const resolvedTaskId = resolveActiveTaskId(resp, activeTaskId);
-        if (resolvedTaskId && resolvedTaskId !== activeTaskId) {
+        if (!resolvedTaskId) {
+          setActiveTaskId(0);
+          setRuns([]);
+          return;
+        }
+        if (resolvedTaskId !== activeTaskId) {
           setActiveTaskId(resolvedTaskId);
         }
       } catch (error) {
@@ -57,36 +75,146 @@ function TestTaskPage() {
     [activeTaskId, setActiveTaskId, t]
   );
 
-  const handleTaskStatus = useCallback((statusMessage: TaskStatusPushMessage) => {
-    setTasks((current) =>
-      current.map((task) => {
-        if (task.id !== statusMessage.taskId) {
-          return task;
+  const loadRuns = useCallback(
+    async (taskId: number, silent = false) => {
+      if (!silent) {
+        setRunsLoading(true);
+      }
+      try {
+        const runList = await listTaskRunsApi(taskId);
+        setRuns(runList);
+        const resolvedRunId = resolveActiveRunId(runList, activeRunId);
+        if (!resolvedRunId) {
+          setActiveRunId(0);
+          return;
+        }
+        if (resolvedRunId !== activeRunId) {
+          setActiveRunId(resolvedRunId);
+        }
+      } catch (error) {
+        if (!silent) {
+          message.error(getRequestErrorMessage(error, t("common.loadFailed")));
+        }
+        setRuns([]);
+        setActiveRunId(0);
+      } finally {
+        if (!silent) {
+          setRunsLoading(false);
+        }
+      }
+    },
+    [activeRunId, setActiveRunId, t]
+  );
+
+  const handleTaskStatus = useCallback(
+    (statusMessage: TaskStatusPushMessage) => {
+      setTasks((current) =>
+        current.map((task) => {
+          if (task.id !== statusMessage.taskId) {
+            return task;
+          }
+
+          return {
+            ...task,
+            status: statusMessage.status,
+            startTime: statusMessage.status === "RUNNING" && statusMessage.timestamp ? statusMessage.timestamp : task.startTime
+          };
+        })
+      );
+
+      if (!statusMessage.runId || statusMessage.taskId !== activeTaskId) {
+        return;
+      }
+
+      const runId = statusMessage.runId;
+
+      setRuns((current) => {
+        const existing = current.find((run) => run.id === runId);
+        const nextRun: TestTaskRun = {
+          id: runId,
+          taskId: statusMessage.taskId,
+          status: statusMessage.status,
+          startTime:
+            statusMessage.status === "RUNNING"
+              ? statusMessage.timestamp ?? existing?.startTime ?? existing?.createdAt ?? null
+              : existing?.startTime ?? existing?.createdAt ?? statusMessage.timestamp ?? null,
+          endTime: statusMessage.status === "RUNNING" ? null : statusMessage.timestamp ?? existing?.endTime ?? null,
+          createdAt: existing?.createdAt ?? statusMessage.timestamp ?? null
+        };
+
+        if (!existing) {
+          return [nextRun, ...current];
         }
 
-        return {
-          ...task,
-          status: statusMessage.status,
-          startTime: statusMessage.status === "RUNNING" && statusMessage.timestamp ? statusMessage.timestamp : task.startTime
-        };
-      })
-    );
-  }, []);
+        return current.map((run) => (run.id === runId ? { ...run, ...nextRun } : run));
+      });
 
-  const { transport, series } = useWebSocket(activeTaskId, realtimeResetKey, handleTaskStatus);
+      if (statusMessage.status === "RUNNING") {
+        setActiveRunId(runId);
+      }
+    },
+    [activeTaskId, setActiveRunId]
+  );
+
+  const currentTask = useMemo(() => tasks.find((item) => item.id === activeTaskId), [tasks, activeTaskId]);
+  const currentRun = useMemo(() => runs.find((item) => item.id === activeRunId), [runs, activeRunId]);
+  const historyLoader = useCallback(() => (activeRunId ? runMetricsApi(activeRunId) : Promise.resolve([])), [activeRunId]);
+  const { transport, series } = useWebSocket({
+    taskId: activeTaskId,
+    resetKey: `${activeTaskId}-${activeRunId}-${currentRun?.startTime ?? "idle"}`,
+    onTaskStatus: handleTaskStatus,
+    historyLoader,
+    realtimeEnabled: currentRun?.status === "RUNNING"
+  });
 
   useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
 
   useEffect(() => {
+    if (!activeTaskId) {
+      setRuns([]);
+      setActiveRunId(0);
+      return;
+    }
+    void loadRuns(activeTaskId);
+  }, [activeTaskId, loadRuns, setActiveRunId]);
+
+  useEffect(() => {
+    if (!activeRunId) {
+      setReport(null);
+      return;
+    }
+
+    let disposed = false;
+    void getAnalysisReportByRunApi(activeRunId)
+      .then((result) => {
+        if (!disposed) {
+          setReport(result);
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setReport(null);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [activeRunId]);
+
+  useEffect(() => {
     const handleFocusRefresh = () => {
       void loadTasks(true);
+      if (activeTaskId) {
+        void loadRuns(activeTaskId, true);
+      }
     };
 
     const handleVisibilityRefresh = () => {
       if (document.visibilityState === "visible") {
-        void loadTasks(true);
+        handleFocusRefresh();
       }
     };
 
@@ -97,15 +225,18 @@ function TestTaskPage() {
       window.removeEventListener("focus", handleFocusRefresh);
       document.removeEventListener("visibilitychange", handleVisibilityRefresh);
     };
-  }, [loadTasks]);
+  }, [activeTaskId, loadRuns, loadTasks]);
 
   useEffect(() => {
     const previousTransport = previousTransportRef.current;
     if (previousTransport === "websocket" && transport !== "websocket") {
       void loadTasks(true);
+      if (activeTaskId) {
+        void loadRuns(activeTaskId, true);
+      }
     }
     previousTransportRef.current = transport;
-  }, [loadTasks, transport]);
+  }, [activeTaskId, loadRuns, loadTasks, transport]);
 
   useEffect(() => {
     let disposed = false;
@@ -139,26 +270,11 @@ function TestTaskPage() {
   const xAxis = useMemo(() => series.map((s) => s.time), [series]);
   const connectionTagColor = transport === "websocket" ? "green" : transport === "polling" ? "gold" : "default";
   const connectionLabel =
-    transport === "websocket" ? t("testTask.wsOnline") : transport === "polling" ? t("testTask.wsFallback") : t("testTask.wsOffline");
-
-  const statusCodeOption = {
-    tooltip: { trigger: "item" },
-    legend: { bottom: 0 },
-    series: [
-      {
-        type: "pie",
-        radius: ["46%", "74%"],
-        label: { formatter: "{b}: {d}%" },
-        data: [
-          { value: 85, name: "200" },
-          { value: 7, name: "302" },
-          { value: 4, name: "429" },
-          { value: 3, name: "500" },
-          { value: 1, name: "503" }
-        ]
-      }
-    ]
-  };
+    transport === "websocket"
+      ? t("testTask.wsOnline")
+      : transport === "polling"
+        ? t("testTask.wsFallback")
+        : t("testTask.wsOffline");
 
   return (
     <div className="page-shell">
@@ -170,147 +286,168 @@ function TestTaskPage() {
                 <Typography.Title level={3} style={{ margin: 0 }}>{t("testTask.title")}</Typography.Title>
                 <Typography.Text type="secondary">{t("testTask.subtitle")}</Typography.Text>
               </div>
-              <Space wrap align="start">
+              <Space wrap align="start" size={16}>
                 <ActiveTaskSelector
                   label={t("testTask.currentTask")}
                   tasks={tasks}
                   value={activeTaskId}
                   loading={tasksLoading}
                   onChange={setActiveTaskId}
-                  width={320}
+                  width={300}
+                />
+                <ActiveRunSelector
+                  label={t("testTask.currentRun")}
+                  runs={runs}
+                  value={activeRunId}
+                  loading={runsLoading}
+                  onChange={setActiveRunId}
+                  width={300}
                 />
                 <Space wrap>
-                  <Tag color={connectionTagColor} icon={<WifiOutlined />}>
-                    {connectionLabel}
-                  </Tag>
-                  <Button icon={<ReloadOutlined />} loading={tasksLoading} onClick={() => void loadTasks()}>
-                    {t("common.refresh")}
-                  </Button>
-                  <Button
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    onClick={async () => {
-                      const taskId = activeTaskId || tasks[0]?.id;
-                      if (!taskId) {
-                        message.warning(t("testTask.selectTaskFirst"));
-                        return;
-                      }
-                      await startTaskApi(taskId);
-                      await loadTasks();
-                      message.success(t("testTask.startSuccess"));
-                    }}
-                  >
-                    {t("testTask.startTask")}
-                  </Button>
-                  <Button
-                    danger
-                    icon={<PauseCircleOutlined />}
-                    onClick={async () => {
-                      const taskId = activeTaskId || tasks[0]?.id;
-                      if (!taskId) {
-                        message.warning(t("testTask.selectTaskFirst"));
-                        return;
-                      }
-                      await stopTaskApi(taskId);
-                      await loadTasks();
-                      message.info(t("testTask.stopSuccess"));
-                    }}
-                  >
-                    {t("testTask.stopTask")}
-                  </Button>
+                  {canCreateTask ? (
+                    <Button icon={<PlusOutlined />} onClick={() => navigate("/test/task/create")}>
+                      {t("testTask.createTask")}
+                    </Button>
+                  ) : null}
+                  {currentRun?.status === "RUNNING" ? (
+                    <Tag color={connectionTagColor} icon={<WifiOutlined />}>
+                      {connectionLabel}
+                    </Tag>
+                  ) : null}
+                  {canStartTask ? (
+                    <Button
+                      type="primary"
+                      icon={<PlayCircleOutlined />}
+                      onClick={async () => {
+                        const taskId = activeTaskId || tasks[0]?.id;
+                        if (!taskId) {
+                          message.warning(t("testTask.selectTaskFirst"));
+                          return;
+                        }
+                        try {
+                          await startTaskApi(taskId);
+                          await loadTasks();
+                          await loadRuns(taskId, true);
+                          message.success(t("testTask.startSuccess"));
+                        } catch (error) {
+                          message.error(getRequestErrorMessage(error, t("common.loadFailed")));
+                        }
+                      }}
+                    >
+                      {t("testTask.startTask")}
+                    </Button>
+                  ) : null}
+                  {canStopTask ? (
+                    <Button
+                      danger
+                      icon={<PauseCircleOutlined />}
+                      onClick={async () => {
+                        const taskId = activeTaskId || tasks[0]?.id;
+                        if (!taskId) {
+                          message.warning(t("testTask.selectTaskFirst"));
+                          return;
+                        }
+                        try {
+                          await stopTaskApi(taskId);
+                          await loadTasks();
+                          await loadRuns(taskId, true);
+                          message.info(t("testTask.stopSuccess"));
+                        } catch (error) {
+                          message.error(getRequestErrorMessage(error, t("common.loadFailed")));
+                        }
+                      }}
+                    >
+                      {t("testTask.stopTask")}
+                    </Button>
+                  ) : null}
+                  {canViewAnalysisReport ? (
+                    <Button disabled={!activeRunId} onClick={() => navigate("/analysis/report")}>
+                      {t("testTask.openReport")}
+                    </Button>
+                  ) : null}
                 </Space>
               </Space>
             </div>
           </Card>
         </Col>
 
-        <Col xs={24} md={12} xl={7} className="task-console-top-col">
+        <Col xs={24} md={8}>
           <Card className="glass-card task-console-card task-console-card--top" title={t("testTask.snapshot")} style={{ borderRadius: 18 }}>
-            <div className="task-console-snapshot">
-              <div className="task-console-snapshot__header">
-                <div>
-                  <Typography.Text type="secondary">{t("testTask.colPlan")}</Typography.Text>
-                  <Typography.Title level={4} style={{ margin: "4px 0 0" }}>
-                    {activeTask?.planName || "--"}
-                  </Typography.Title>
+            {currentTask && currentRun ? (
+              <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                <div className="task-console-snapshot__header">
+                  <div>
+                    <Typography.Text type="secondary">{t("testTask.colPlan")}</Typography.Text>
+                    <Typography.Title level={4} style={{ margin: "4px 0 0" }}>
+                      {currentTask.planName || "--"}
+                    </Typography.Title>
+                  </div>
+                  <Tag color={taskStatusColorMap[currentRun.status] ?? "default"}>{renderTaskStatus(t, currentRun.status)}</Tag>
                 </div>
-                <Tag color={activeTask?.status === "RUNNING" ? "green" : activeTask?.status === "SUCCESS" ? "blue" : activeTask?.status === "FAILED" ? "red" : "default"}>
-                  {activeTask?.status || "--"}
-                </Tag>
-              </div>
-
-              <Row gutter={[16, 16]}>
-                <Col span={12}>
-                  <Statistic title={t("testTask.qps")} value={series.at(-1)?.qps ?? 0} suffix="req/s" precision={0} />
-                </Col>
-                <Col span={12}>
-                  <Statistic title={t("testTask.p99")} value={series.at(-1)?.p99 ?? 0} suffix="ms" precision={0} />
-                </Col>
-                <Col span={12}>
-                  <Statistic
-                    title={t("testTask.errorRate")}
-                    value={series.at(-1)?.errorRate ?? 0}
-                    suffix="%"
-                    precision={2}
-                    valueStyle={{ color: (series.at(-1)?.errorRate || 0) > 5 ? "#c92a2a" : undefined }}
-                  />
-                </Col>
-                <Col span={12}>
-                  <Statistic title={t("testTask.colTask")} value={activeTask?.id ?? undefined} formatter={(value) => value ?? "--"} />
-                </Col>
-              </Row>
-
-              <div className="task-console-snapshot__meta">
-                <div>
-                  <Typography.Text type="secondary">{t("testTask.taskStart")}</Typography.Text>
-                  <div>{activeTask?.startTime ? formatDateTime(activeTask.startTime) : "--"}</div>
-                </div>
-                <div>
-                  <Typography.Text type="secondary">Scene</Typography.Text>
-                  <div>{activeTask?.sceneName || "--"}</div>
-                </div>
-              </div>
-            </div>
+                <Row gutter={[16, 16]}>
+                  <Col span={12}>
+                    <Statistic title={t("testTask.qps")} value={series.at(-1)?.qps ?? 0} suffix="req/s" precision={0} />
+                  </Col>
+                  <Col span={12}>
+                    <Statistic title={t("testTask.p99")} value={series.at(-1)?.p99 ?? 0} suffix="ms" precision={0} />
+                  </Col>
+                  <Col span={12}>
+                    <Statistic
+                      title={t("testTask.errorRate")}
+                      value={series.at(-1)?.errorRate ?? 0}
+                      suffix="%"
+                      precision={2}
+                      valueStyle={{ color: (series.at(-1)?.errorRate || 0) > 5 ? "#c92a2a" : undefined }}
+                    />
+                  </Col>
+                  <Col span={12}>
+                    <Statistic title={t("analysisReport.runId")} value={currentRun.id} />
+                  </Col>
+                </Row>
+              </Space>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("testTask.noRunSelected")} />
+            )}
           </Card>
         </Col>
 
-        <Col xs={24} md={12} xl={9} className="task-console-top-col">
+        <Col xs={24} md={8}>
           <RealtimeMetricsPanel metric={sysMetric} compact className="task-console-card task-console-card--top" />
         </Col>
 
-        <Col xs={24} xl={8} className="task-console-top-col">
-          <Card className="glass-card task-console-card task-console-card--top" title={t("testTask.taskList")} style={{ borderRadius: 18 }}>
-            <Table
-              rowKey="id"
-              size="small"
-              loading={tasksLoading}
-              pagination={false}
-              dataSource={tasks}
-              onRow={(record) => ({
-                onClick: () => setActiveTaskId(record.id),
-                style: { cursor: "pointer", background: activeTaskId === record.id ? "#e7f5ff" : "transparent" }
-              })}
-              columns={[
-                { title: t("testTask.colTask"), dataIndex: "id", width: 76 },
-                { title: t("testTask.colPlan"), dataIndex: "planName" },
-                {
-                  title: t("testTask.colStatus"),
-                  dataIndex: "status",
-                  render: (value: string) => (
-                    <Tag color={value === "RUNNING" ? "green" : value === "SUCCESS" ? "blue" : value === "FAILED" ? "red" : "default"}>{value}</Tag>
-                  )
-                },
-                {
-                  title: t("testTask.colError"),
-                  dataIndex: "errorRate",
-                  render: (v: number) => formatPercent(v)
-                }
-              ]}
-            />
+        <Col xs={24} md={8}>
+          <Card className="glass-card task-console-card task-console-card--top" title={t("testTask.runOverview")} style={{ borderRadius: 18 }}>
+            {currentTask && currentRun ? (
+              <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                <Space wrap>
+                  <Tag color="blue">#{currentTask.id}</Tag>
+                  <Tag color="geekblue">run #{currentRun.id}</Tag>
+                  <Tag color={taskStatusColorMap[currentRun.status] ?? "default"}>{renderTaskStatus(t, currentRun.status)}</Tag>
+                </Space>
+                <div>
+                  <Typography.Text type="secondary">{t("testTask.taskStart")}</Typography.Text>
+                  <div>{currentRun.startTime ? formatDateTime(currentRun.startTime) : "--"}</div>
+                </div>
+                <div>
+                  <Typography.Text type="secondary">{t("testTask.taskEnd")}</Typography.Text>
+                  <div>{currentRun.endTime ? formatDateTime(currentRun.endTime) : "--"}</div>
+                </div>
+                <div>
+                  <Typography.Text type="secondary">{t("testTask.currentTask")}</Typography.Text>
+                  <div>{currentTask.sceneName || "--"}</div>
+                </div>
+                <div>
+                  <Typography.Text type="secondary">{t("dashboard.analysisSummary")}</Typography.Text>
+                  <div>{report?.summary || t("analysisReport.noReport")}</div>
+                </div>
+              </Space>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("testTask.noRunSelected")} />
+            )}
           </Card>
         </Col>
 
-        <Col xs={24} xl={16} className="task-console-main-col">
+        <Col span={24}>
           <Card className="glass-card task-console-card task-console-card--main" style={{ borderRadius: 18 }}>
             <PerformanceChart
               title={t("testTask.realtimeCurves")}
@@ -329,25 +466,16 @@ function TestTaskPage() {
           </Card>
         </Col>
 
-        <Col xs={24} xl={8} className="task-console-side-col">
-          <Row gutter={[16, 16]} className="task-console-side-stack">
-            <Col span={24} className="task-console-side-stack__item">
-              <Card className="glass-card task-console-card task-console-card--side" style={{ borderRadius: 18 }}>
-                <PerformanceChart
-                  title={t("testTask.errorCurve")}
-                  xAxis={xAxis}
-                  yAxisName="%"
-                  series={[{ name: t("testTask.errorRate"), color: "#c92a2a", data: series.map((s) => s.errorRate) }]}
-                  height={190}
-                />
-              </Card>
-            </Col>
-            <Col span={24} className="task-console-side-stack__item">
-              <Card className="glass-card task-console-card task-console-card--side" title={t("testTask.statusDistribution")} style={{ borderRadius: 18 }}>
-                <LazyEChart option={statusCodeOption} style={{ height: 190 }} />
-              </Card>
-            </Col>
-          </Row>
+        <Col span={24}>
+          <Card className="glass-card task-console-card task-console-card--side" style={{ borderRadius: 18 }}>
+            <PerformanceChart
+              title={t("testTask.errorCurve")}
+              xAxis={xAxis}
+              yAxisName="%"
+              series={[{ name: t("testTask.errorRate"), color: "#c92a2a", data: series.map((s) => s.errorRate) }]}
+              height={220}
+            />
+          </Card>
         </Col>
       </Row>
     </div>

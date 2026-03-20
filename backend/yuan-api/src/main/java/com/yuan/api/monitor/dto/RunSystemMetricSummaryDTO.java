@@ -26,4 +26,10 @@ public class RunSystemMetricSummaryDTO {
 
     /** 高内存持续秒数 */
     private Integer highMemorySeconds;
+
+    /** 采到有效样本的秒数 */
+    private Integer sampledSeconds;
+
+    /** 仅有占位空桶的秒数 */
+    private Integer missingSeconds;
 }

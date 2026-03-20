@@ -6,16 +6,21 @@
     <resultMap id="SystemMetricsRecordResultMap" type="com.yuan.monitor.entity.SystemMetricsRecord">
         <id property="id" column="id"/>
         <result property="taskId" column="task_id"/>
+        <result property="runId" column="run_id"/>
         <result property="ts" column="ts"/>
         <result property="cpu" column="cpu"/>
+        <result property="cpuMax" column="cpu_max"/>
         <result property="memory" column="memory"/>
+        <result property="memoryMax" column="memory_max"/>
         <result property="disk" column="disk"/>
         <result property="networkIn" column="network_in"/>
         <result property="networkOut" column="network_out"/>
+        <result property="sampleCount" column="sample_count"/>
+        <result property="missing" column="missing"/>
     </resultMap>
 
     <sql id="SystemMetricsColumns">
-        id, task_id, ts, cpu, memory, disk, network_in, network_out
+        id, task_id, run_id, ts, cpu, cpu_max, memory, memory_max, disk, network_in, network_out, sample_count, missing
     </sql>
 
 </mapper>

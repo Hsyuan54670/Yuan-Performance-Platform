@@ -6,6 +6,14 @@ import type { RealtimeMetricPoint, TaskStatusPushMessage, TaskStatus } from "../
 export type RealtimeTransport = "websocket" | "polling" | "disconnected";
 export type TaskStatusMessageHandler = (message: TaskStatusPushMessage) => void;
 
+interface UseWebSocketOptions {
+  taskId?: number | null;
+  resetKey?: string | number | null;
+  onTaskStatus?: TaskStatusMessageHandler | null;
+  historyLoader?: (() => Promise<RealtimeMetricPoint[]>) | null;
+  realtimeEnabled?: boolean;
+}
+
 const MAX_SERIES_POINTS = 180;
 const POLL_INTERVAL_MS = 3000;
 const WS_FALLBACK_TIMEOUT_MS = 2000;
@@ -149,13 +157,31 @@ const getWebSocketUrl = (taskId: number) => {
   return `${base.replace(/\/$/, "")}/ws/monitor/${taskId}${query}`;
 };
 
-export const useWebSocket = (taskId: number, resetKey?: string | number | null, onTaskStatus?: TaskStatusMessageHandler | null) => {
+export const useWebSocket = ({
+  taskId,
+  resetKey,
+  onTaskStatus,
+  historyLoader,
+  realtimeEnabled = true
+}: UseWebSocketOptions) => {
   const [connected, setConnected] = useState(false);
   const [series, setSeries] = useState<RealtimeMetricPoint[]>([]);
   const [transport, setTransport] = useState<RealtimeTransport>("disconnected");
 
   useEffect(() => {
-    if (!taskId) {
+    const resolvedTaskId = taskId ?? 0;
+
+    const loadHistory = async (): Promise<RealtimeMetricPoint[]> => {
+      if (historyLoader) {
+        return historyLoader();
+      }
+      if (!resolvedTaskId) {
+        return [];
+      }
+      return metricsHistoryApi(resolvedTaskId);
+    };
+
+    if (!resolvedTaskId && !historyLoader) {
       setConnected(false);
       setSeries([]);
       setTransport("disconnected");
@@ -190,7 +216,7 @@ export const useWebSocket = (taskId: number, resetKey?: string | number | null, 
 
     const loadMetricsByPolling = async () => {
       try {
-        const resp = await metricsHistoryApi(taskId);
+        const resp = await loadHistory();
         if (disposed) {
           return;
         }
@@ -229,7 +255,11 @@ export const useWebSocket = (taskId: number, resetKey?: string | number | null, 
     };
 
     const connectWebSocket = () => {
-      const wsUrl = getWebSocketUrl(taskId);
+      if (!resolvedTaskId) {
+        return;
+      }
+
+      const wsUrl = getWebSocketUrl(resolvedTaskId);
       if (!wsUrl) {
         startPollingFallback();
         return;
@@ -306,7 +336,7 @@ export const useWebSocket = (taskId: number, resetKey?: string | number | null, 
     setSeries([]);
     setTransport("disconnected");
 
-    void metricsHistoryApi(taskId)
+    void loadHistory()
       .then((resp) => {
         if (!disposed) {
           setSeries(trimSeries(resp));
@@ -316,7 +346,9 @@ export const useWebSocket = (taskId: number, resetKey?: string | number | null, 
         // Keep the last successful history snapshot.
       });
 
-    connectWebSocket();
+    if (realtimeEnabled && resolvedTaskId) {
+      connectWebSocket();
+    }
 
     return () => {
       disposed = true;
@@ -327,7 +359,7 @@ export const useWebSocket = (taskId: number, resetKey?: string | number | null, 
       closeSocket();
       setConnected(false);
     };
-  }, [taskId, resetKey, onTaskStatus]);
+  }, [historyLoader, onTaskStatus, realtimeEnabled, resetKey, taskId]);
 
   return { connected, series, transport };
 };

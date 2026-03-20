@@ -31,10 +31,15 @@ spring:
               uri: lb://yuan-analysis
               predicates:
                 - Path=/analysis/**
+            - id: report-service
+              uri: lb://yuan-report
+              predicates:
+                - Path=/report/**
 
   data:
     redis:
       host: 172.23.80.90
       port: 6379
       password: Lqy147258369
+
 

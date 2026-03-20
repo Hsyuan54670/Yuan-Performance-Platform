@@ -42,3 +42,5 @@ jmeter/results/*
 
 doc/*
 docs/*
+
+*.png

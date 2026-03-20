@@ -8,6 +8,16 @@ export interface TestPlan {
   duration: number;
   rampType: "STAIR" | "LINEAR";
   createdAt: string;
+  taskCount: number;
+  relatedSceneNames?: string[];
+}
+
+export interface TestPlanPayload {
+  name: string;
+  targetUrl: string;
+  concurrency: number;
+  duration: number;
+  rampType: "STAIR" | "LINEAR";
 }
 
 export interface SceneStep {
@@ -18,10 +28,30 @@ export interface SceneStep {
   weight: number;
 }
 
+export interface SceneStepPayload {
+  name: string;
+  method: "GET" | "POST" | "PUT" | "DELETE";
+  path: string;
+  weight: number;
+}
+
 export interface TestScene {
   id: number;
   name: string;
+  createdAt: string;
+  taskCount: number;
+  relatedPlanNames?: string[];
   steps: SceneStep[];
+}
+
+export interface TestScenePayload {
+  name: string;
+  steps: SceneStepPayload[];
+}
+
+export interface TestTaskCreatePayload {
+  planId: number;
+  sceneId: number;
 }
 
 export interface TestTask {
@@ -29,11 +59,20 @@ export interface TestTask {
   planName: string;
   sceneName: string;
   status: TaskStatus;
-  startTime: string;
+  startTime: string | null;
   duration: number;
   qps: number;
   p99: number;
   errorRate: number;
+}
+
+export interface TestTaskRun {
+  id: number;
+  taskId: number;
+  status: TaskStatus;
+  startTime: string | null;
+  endTime: string | null;
+  createdAt: string | null;
 }
 
 export interface TaskStatusPushMessage {
