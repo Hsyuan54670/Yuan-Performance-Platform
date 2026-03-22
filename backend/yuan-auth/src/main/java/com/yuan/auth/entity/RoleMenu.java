@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 @Data
 @TableName("auth_role_menu")
 public class RoleMenu {
-
     private Long roleId;
     private Long menuId;
     private LocalDateTime createdAt;

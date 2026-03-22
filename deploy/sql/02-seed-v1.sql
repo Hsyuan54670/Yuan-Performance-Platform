@@ -1,3 +1,5 @@
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 USE yuan_auth;
 
 INSERT INTO auth_permission (code, name, module, description)
@@ -340,3 +342,17 @@ WHERE u.username = 'admin'
       SELECT 1 FROM analysis_rule r
       WHERE r.user_id = u.id AND r.name = '容量与扩容建议增强'
   );
+USE nacos_config;
+
+INSERT INTO `users` (`username`, `password`, `enabled`)
+SELECT 'nacos', '$2a$10$EuWPZHzz32dJN7jexM34MOeYirDdFAZm2kuWj7VEOJhhZkDrxfvUu', TRUE
+WHERE NOT EXISTS (
+    SELECT 1 FROM `users` WHERE `username` = 'nacos'
+);
+
+INSERT INTO `roles` (`username`, `role`)
+SELECT 'nacos', 'ROLE_ADMIN'
+WHERE NOT EXISTS (
+    SELECT 1 FROM `roles` WHERE `username` = 'nacos' AND `role` = 'ROLE_ADMIN'
+);
+

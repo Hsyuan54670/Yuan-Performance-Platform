@@ -1,0 +1,22 @@
+FROM eclipse-temurin:21-jre
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
+# 设置环境变量，让 RUN 命令使用代理
+ENV http_proxy=http://192.168.100.1:7897
+ENV https_proxy=https://192.168.100.1:7897
+ENV no_proxy=localhost,127.0.0.1,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
+
+RUN  apt-get update \
+     && apt-get install -y --no-install-recommends curl \
+     && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+ARG JAR_FILE
+COPY ${JAR_FILE} /app/app.jar
+
+ENV TZ=Asia/Shanghai
+
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:-} -jar /app/app.jar"]

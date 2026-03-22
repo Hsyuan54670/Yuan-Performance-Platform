@@ -1,17 +1,15 @@
 server:
   port: 8082
 spring:
-  application:
-    name: yuan-test
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/yuan_test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER:root}
+    username: ${MYSQL_ACCOUNT:root}
     password: ${MYSQL_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: ${NACOS_SERVER_ADDR:nacos:8848}
   data:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
@@ -30,4 +28,7 @@ jmeter:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+logging:
+  level:
+    com.yuan.auth.mapper: debug
+

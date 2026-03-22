@@ -1,3 +1,5 @@
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 USE yuan_auth;
 
 CREATE TABLE IF NOT EXISTS auth_user (
@@ -297,3 +299,4 @@ CREATE TABLE IF NOT EXISTS analysis_suggestion (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_analysis_suggestion_report_id (report_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+

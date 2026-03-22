@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: yuan-gateway
+  config:
+    import: 'optional:nacos:'
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${SERVER_URL:127.0.0.1}:8848
+      config:
+        server-addr: ${SERVER_URL:127.0.0.1}:8848
+        file-extension: yml
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:test}

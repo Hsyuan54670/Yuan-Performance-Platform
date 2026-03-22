@@ -22,6 +22,9 @@ import { getRequestErrorMessage } from "../../../utils/request";
 import { renderTaskStatus, taskStatusColorMap } from "../../../utils/taskStatus";
 import { resolveActiveRunId, resolveActiveTaskId } from "../../../utils/taskSelection";
 
+const LATEST_RUN_WAIT_MS = 6000;
+const LATEST_RUN_POLL_INTERVAL_MS = 400;
+
 function TestTaskPage() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<TestTask[]>([]);
@@ -104,6 +107,45 @@ function TestTaskPage() {
       }
     },
     [activeRunId, setActiveRunId, t]
+  );
+
+  const focusLatestRun = useCallback(
+    async (taskId: number, previousLatestRunId?: number) => {
+      setRunsLoading(true);
+      try {
+        const deadline = Date.now() + LATEST_RUN_WAIT_MS;
+        let latestRunList: TestTaskRun[] = [];
+
+        while (Date.now() <= deadline) {
+          latestRunList = await listTaskRunsApi(taskId);
+          setRuns(latestRunList);
+
+          const latestRunId = latestRunList[0]?.id;
+          if (!latestRunId) {
+            setActiveRunId(0);
+            return;
+          }
+
+          setActiveRunId(latestRunId);
+          if (!previousLatestRunId || latestRunId !== previousLatestRunId) {
+            return;
+          }
+
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, LATEST_RUN_POLL_INTERVAL_MS);
+          });
+        }
+
+        setActiveRunId(latestRunList[0]?.id ?? 0);
+      } catch (error) {
+        message.error(getRequestErrorMessage(error, t("common.loadFailed")));
+        setRuns([]);
+        setActiveRunId(0);
+      } finally {
+        setRunsLoading(false);
+      }
+    },
+    [setActiveRunId, t]
   );
 
   const handleTaskStatus = useCallback(
@@ -325,9 +367,10 @@ function TestTaskPage() {
                           return;
                         }
                         try {
+                          const previousLatestRunId = runs[0]?.id ?? (activeRunId > 0 ? activeRunId : undefined);
                           await startTaskApi(taskId);
                           await loadTasks();
-                          await loadRuns(taskId, true);
+                          await focusLatestRun(taskId, previousLatestRunId);
                           message.success(t("testTask.startSuccess"));
                         } catch (error) {
                           message.error(getRequestErrorMessage(error, t("common.loadFailed")));

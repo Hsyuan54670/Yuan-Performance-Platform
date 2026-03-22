@@ -6,7 +6,7 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: ${NACOS_SERVER_ADDR:nacos:8848}
     gateway:
       server:
         webflux:
@@ -40,3 +40,22 @@ spring:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:Lqy147258369}
+
+yuan:
+  gateway:
+    cors:
+      allowed-origin-patterns:
+        - http://localhost:5173
+        - http://127.0.0.1:5173
+      allowed-methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - PATCH
+        - OPTIONS
+      allowed-headers:
+        - "*"
+      allow-credentials: false
+      max-age: 1800
+

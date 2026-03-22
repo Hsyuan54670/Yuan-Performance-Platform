@@ -25,15 +25,18 @@ public class SystemMetricsCollector {
     private static final CentralProcessor PROCESSOR = SYSTEM_INFO.getHardware().getProcessor();
     private static final GlobalMemory MEMORY = SYSTEM_INFO.getHardware().getMemory();
 
-    // ====================== 状态快照（保证线程安全） ======================
-    // CPU 快照
-    private final AtomicReference<long[]> prevCpuTicks = new AtomicReference<>(PROCESSOR.getSystemCpuLoadTicks());
-    // 网络快照
-    private final AtomicReference<NetworkSnapshot> prevNetworkSnapshot = new AtomicReference<>();
-    // 磁盘 IO 快照 (新增)
-    private final AtomicReference<DiskSnapshot> prevDiskSnapshot = new AtomicReference<>();
+    // 前端展示轮询和后台高频采样如果共用同一组快照，会互相覆盖 CPU / 网络 / 磁盘的“上一帧”。
+    // 这里显式拆成两套上下文，避免 HTTP 查询刚好踩在采样任务后面时把瞬时区间算成 0。
+    private final MetricProbe displayProbe = new MetricProbe();
+    private final MetricProbe samplingProbe = new MetricProbe();
 
-    // 内部类：网络快照
+    // ====================== 状态快照（保证线程安全） ======================
+    private static class MetricProbe {
+        final AtomicReference<long[]> prevCpuTicks = new AtomicReference<>(PROCESSOR.getSystemCpuLoadTicks());
+        final AtomicReference<NetworkSnapshot> prevNetworkSnapshot = new AtomicReference<>();
+        final AtomicReference<DiskSnapshot> prevDiskSnapshot = new AtomicReference<>();
+    }
+
     private static class NetworkSnapshot {
         final long timestamp;
         final long bytesRecv;
@@ -46,10 +49,9 @@ public class SystemMetricsCollector {
         }
     }
 
-    // 内部类：磁盘 IO 快照 (新增)
     private static class DiskSnapshot {
         final long timestamp;
-        final long transferTime; // 磁盘 IO 繁忙的累计时间 (ms)
+        final long transferTime;
 
         DiskSnapshot(long timestamp, long transferTime) {
             this.timestamp = timestamp;
@@ -57,110 +59,6 @@ public class SystemMetricsCollector {
         }
     }
 
-    // ====================== 核心采集入口 ======================
-    public SystemMetricVO collectCurrentSystemMetrics() {
-        // 默认监控系统盘（Windows C:，Linux /），可改为你的压测结果目录
-        return collectCurrentSystemMetrics(System.getProperty("os.name").toLowerCase().contains("win") ? "C:/" : "/");
-    }
-
-    /**
-     * 重载方法：指定监控的磁盘路径
-     * @param diskPath 磁盘路径（如 "E:/jmeter/results"）
-     */
-    public SystemMetricVO collectCurrentSystemMetrics(String diskPath) {
-        SystemMetricVO metric = new SystemMetricVO();
-
-        // 1. CPU 使用率
-        metric.setCpu(getCpuUsage());
-
-        // 2. 内存使用率
-        metric.setMemory(getMemoryUsage());
-
-        // 3. 磁盘 IO 使用率 (注意：这里传 path 目前仅用于兼容接口，逻辑是统计所有物理磁盘的总 IO)
-        metric.setDisk(getDiskUsage(diskPath));
-
-        // 4. 网络出入流量
-        NetworkRate networkRate = getNetworkRate();
-        metric.setNetworkIn(networkRate.inRate);
-        metric.setNetworkOut(networkRate.outRate);
-
-        return metric;
-    }
-
-    // ====================== 1. CPU 使用率 ======================
-    private BigDecimal getCpuUsage() {
-        long[] prevTicks = prevCpuTicks.get();
-        long[] newTicks = PROCESSOR.getSystemCpuLoadTicks();
-
-        double cpuLoad = PROCESSOR.getSystemCpuLoadBetweenTicks(prevTicks, newTicks) * 100;
-        prevCpuTicks.set(newTicks);
-
-        return BigDecimal.valueOf(cpuLoad).setScale(1, RoundingMode.HALF_UP);
-    }
-
-    // ====================== 2. 内存使用率 ======================
-    private BigDecimal getMemoryUsage() {
-        long total = MEMORY.getTotal();
-        long available = MEMORY.getAvailable();
-
-        BigDecimal usage = BigDecimal.valueOf(total - available)
-                .divide(BigDecimal.valueOf(total), 4, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100))
-                .setScale(1, RoundingMode.HALF_UP);
-
-        return usage;
-    }
-
-    // ====================== 3. 磁盘 IO 使用率  ======================
-
-    /**
-     * 获取磁盘 IO 使用率
-     * 注意：这里统计的是所有物理磁盘的总体 IO 繁忙程度 (Utilization)
-     * 范围：0 - 100
-     */
-    private BigDecimal getDiskUsage(String path) {
-        long currentTime = System.currentTimeMillis();
-        long currentTransferTime = 0;
-
-        // 1. 获取所有物理磁盘并累加它们的 IO 繁忙时间
-        List<HWDiskStore> diskStores = SYSTEM_INFO.getHardware().getDiskStores();
-        for (HWDiskStore disk : diskStores) {
-            // 更新磁盘属性以获取最新数据
-            disk.updateAttributes();
-            // getTransferTime(): 操作系统记录的磁盘忙于读写的总毫秒数
-            currentTransferTime += disk.getTransferTime();
-        }
-
-        // 2. 获取上一次快照
-        DiskSnapshot prev = prevDiskSnapshot.get();
-        if (prev == null) {
-            // 第一次调用，初始化快照并返回 0
-            prevDiskSnapshot.set(new DiskSnapshot(currentTime, currentTransferTime));
-            return BigDecimal.ZERO;
-        }
-
-        // 3. 计算差值
-        long timeDelta = currentTime - prev.timestamp;
-        long ioTimeDelta = currentTransferTime - prev.transferTime;
-
-        // 4. 更新快照
-        prevDiskSnapshot.set(new DiskSnapshot(currentTime, currentTransferTime));
-
-        // 5. 边界检查
-        if (timeDelta <= 0 || ioTimeDelta <= 0) {
-            return BigDecimal.ZERO;
-        }
-
-        // 6. 计算使用率：(IO 繁忙时间差 / 经过的时间差) * 100
-        // 因为 ioTimeDelta 是所有磁盘的总和，如果有多个磁盘，使用率可能超过 100%，
-        // 通常性能测试中我们看单盘或者取最大值，这里为了简单演示，取 min(100) 或者展示实际值
-        return BigDecimal.valueOf(ioTimeDelta)
-                .multiply(BigDecimal.valueOf(100))
-                .divide(BigDecimal.valueOf(timeDelta), 1, RoundingMode.HALF_UP)
-                .min(BigDecimal.valueOf(100)); // 限制最大显示 100%
-    }
-
-    // ====================== 4. 网络出入流量 ======================
     private static class NetworkRate {
         final BigDecimal inRate;
         final BigDecimal outRate;
@@ -171,7 +69,102 @@ public class SystemMetricsCollector {
         }
     }
 
-    private NetworkRate getNetworkRate() {
+    // ====================== 核心采集入口 ======================
+    public SystemMetricVO collectCurrentSystemMetrics() {
+        return collectCurrentSystemMetricsForDisplay();
+    }
+
+    public SystemMetricVO collectCurrentSystemMetricsForDisplay() {
+        return collectCurrentSystemMetrics(displayProbe, defaultDiskPath());
+    }
+
+    public SystemMetricVO collectCurrentSystemMetricsForSampling() {
+        return collectCurrentSystemMetrics(samplingProbe, defaultDiskPath());
+    }
+
+    /**
+     * 重载方法：指定监控的磁盘路径
+     * @param diskPath 磁盘路径（如 "E:/jmeter/results"）
+     */
+    public SystemMetricVO collectCurrentSystemMetrics(String diskPath) {
+        return collectCurrentSystemMetrics(displayProbe, diskPath);
+    }
+
+    public SystemMetricVO collectCurrentSystemMetricsForSampling(String diskPath) {
+        return collectCurrentSystemMetrics(samplingProbe, diskPath);
+    }
+
+    private String defaultDiskPath() {
+        return System.getProperty("os.name").toLowerCase().contains("win") ? "C:/" : "/";
+    }
+
+    private SystemMetricVO collectCurrentSystemMetrics(MetricProbe probe, String diskPath) {
+        SystemMetricVO metric = new SystemMetricVO();
+        metric.setCpu(getCpuUsage(probe));
+        metric.setMemory(getMemoryUsage());
+        metric.setDisk(getDiskUsage(probe, diskPath));
+
+        NetworkRate networkRate = getNetworkRate(probe);
+        metric.setNetworkIn(networkRate.inRate);
+        metric.setNetworkOut(networkRate.outRate);
+        return metric;
+    }
+
+    // ====================== 1. CPU 使用率 ======================
+    private BigDecimal getCpuUsage(MetricProbe probe) {
+        long[] prevTicks = probe.prevCpuTicks.get();
+        long[] newTicks = PROCESSOR.getSystemCpuLoadTicks();
+
+        double cpuLoad = PROCESSOR.getSystemCpuLoadBetweenTicks(prevTicks, newTicks) * 100;
+        probe.prevCpuTicks.set(newTicks);
+
+        return BigDecimal.valueOf(cpuLoad).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    // ====================== 2. 内存使用率 ======================
+    private BigDecimal getMemoryUsage() {
+        long total = MEMORY.getTotal();
+        long available = MEMORY.getAvailable();
+
+        return BigDecimal.valueOf(total - available)
+                .divide(BigDecimal.valueOf(total), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(1, RoundingMode.HALF_UP);
+    }
+
+    // ====================== 3. 磁盘 IO 使用率  ======================
+    private BigDecimal getDiskUsage(MetricProbe probe, String path) {
+        long currentTime = System.currentTimeMillis();
+        long currentTransferTime = 0;
+
+        List<HWDiskStore> diskStores = SYSTEM_INFO.getHardware().getDiskStores();
+        for (HWDiskStore disk : diskStores) {
+            disk.updateAttributes();
+            currentTransferTime += disk.getTransferTime();
+        }
+
+        DiskSnapshot prev = probe.prevDiskSnapshot.get();
+        if (prev == null) {
+            probe.prevDiskSnapshot.set(new DiskSnapshot(currentTime, currentTransferTime));
+            return BigDecimal.ZERO;
+        }
+
+        long timeDelta = currentTime - prev.timestamp;
+        long ioTimeDelta = currentTransferTime - prev.transferTime;
+        probe.prevDiskSnapshot.set(new DiskSnapshot(currentTime, currentTransferTime));
+
+        if (timeDelta <= 0 || ioTimeDelta <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        return BigDecimal.valueOf(ioTimeDelta)
+                .multiply(BigDecimal.valueOf(100))
+                .divide(BigDecimal.valueOf(timeDelta), 1, RoundingMode.HALF_UP)
+                .min(BigDecimal.valueOf(100));
+    }
+
+    // ====================== 4. 网络出入流量 ======================
+    private NetworkRate getNetworkRate(MetricProbe probe) {
         long currentTime = System.currentTimeMillis();
         long currentBytesRecv = 0;
         long currentBytesSent = 0;
@@ -185,9 +178,9 @@ public class SystemMetricsCollector {
             }
         }
 
-        NetworkSnapshot prev = prevNetworkSnapshot.get();
+        NetworkSnapshot prev = probe.prevNetworkSnapshot.get();
         if (prev == null) {
-            prevNetworkSnapshot.set(new NetworkSnapshot(currentTime, currentBytesRecv, currentBytesSent));
+            probe.prevNetworkSnapshot.set(new NetworkSnapshot(currentTime, currentBytesRecv, currentBytesSent));
             return new NetworkRate(BigDecimal.ZERO, BigDecimal.ZERO);
         }
 
@@ -198,13 +191,11 @@ public class SystemMetricsCollector {
 
         long bytesRecvDiff = currentBytesRecv - prev.bytesRecv;
         long bytesSentDiff = currentBytesSent - prev.bytesSent;
-
         double timeDiffSec = timeDiffMs / 1000.0;
         BigDecimal inRate = bytesToMBPerSec(bytesRecvDiff, timeDiffSec);
         BigDecimal outRate = bytesToMBPerSec(bytesSentDiff, timeDiffSec);
 
-        prevNetworkSnapshot.set(new NetworkSnapshot(currentTime, currentBytesRecv, currentBytesSent));
-
+        probe.prevNetworkSnapshot.set(new NetworkSnapshot(currentTime, currentBytesRecv, currentBytesSent));
         return new NetworkRate(inRate, outRate);
     }
 

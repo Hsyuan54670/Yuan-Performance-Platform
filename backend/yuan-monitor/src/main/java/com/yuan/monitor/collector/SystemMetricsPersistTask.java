@@ -68,7 +68,7 @@ public class SystemMetricsPersistTask {
             return;
         }
 
-        SystemMetricVO metric = systemMetricsCollector.collectCurrentSystemMetrics();
+        SystemMetricVO metric = systemMetricsCollector.collectCurrentSystemMetricsForSampling();
         LocalDateTime currentSecond = LocalDateTime.now().withNano(0);
         SystemMetricSecondBucket bucket = buckets.computeIfAbsent(currentSecond, SystemMetricSecondBucket::new);
         bucket.registerRuns(trackableRuns);

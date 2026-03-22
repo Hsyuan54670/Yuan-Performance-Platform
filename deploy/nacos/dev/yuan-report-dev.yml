@@ -6,7 +6,7 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        server-addr: ${NACOS_SERVER_ADDR:nacos:8848}
   data:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
@@ -14,3 +14,4 @@ spring:
       password: ${REDIS_PASSWORD:Lqy147258369}
   thymeleaf:
     cache: false
+

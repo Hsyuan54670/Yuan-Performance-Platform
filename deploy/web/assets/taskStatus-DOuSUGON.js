@@ -1,0 +1,1 @@
+const e={RUNNING:"green",SUCCESS:"blue",FAILED:"red",STOPPED:"default",PENDING:"gold"},o=(r,n)=>n?n==="RUNNING"?r("common.statusRunning"):n==="PENDING"?r("common.statusPending"):n==="SUCCESS"?r("common.statusSuccess"):n==="FAILED"?r("common.statusFailed"):n==="STOPPED"?r("common.statusStopped"):n:"--";export{o as r,e as t};

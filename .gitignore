@@ -40,7 +40,7 @@ Desktop.ini
 jmeter/scripts/*
 jmeter/results/*
 
-doc/*
-docs/*
+
 
 *.png
+!img/readme-*.png

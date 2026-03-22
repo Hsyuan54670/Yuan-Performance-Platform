@@ -8,6 +8,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -33,23 +34,18 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
-        if (isWhitelistedPath(path)) {
+        if (HttpMethod.OPTIONS.equals(exchange.getRequest().getMethod()) || isWhitelistedPath(path)) {
             return chain.filter(exchange);
         }
 
-        String token = exchange.getRequest().getHeaders().getFirst("Authorization");
-        if (token == null || !token.startsWith("Bearer ")) {
+        String authorization = exchange.getRequest().getHeaders().getFirst("Authorization");
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
             return unauthorized(exchange, "未登录");
         }
-        token = token.substring(7);
+
+        String token = authorization.substring(7);
         Map<String, Object> claims = isValidToken(token);
         if (claims == null) {
-            return unauthorized(exchange, "Token无效");
-        }
-
-        try {
-            claims = JwtUtil.parseToken(token);
-        } catch (Exception e) {
             return unauthorized(exchange, "Token无效");
         }
 
@@ -77,7 +73,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     }
 
     public Map<String, Object> isValidToken(String token) {
-        Map<String, Object> claims = null;
+        Map<String, Object> claims;
         try {
             claims = JwtUtil.parseToken(token);
         } catch (Exception e) {

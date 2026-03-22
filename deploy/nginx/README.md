@@ -8,4 +8,5 @@
 - 把 `/api/*` 转发到网关 `8080`
 - 把 `/ws/*` 升级转发到网关 WebSocket
 
-默认假设网关地址是 `127.0.0.1:8080`。如果网关和 Nginx 不在同一台机器，请修改 `yuan-web.conf` 中的 `proxy_pass`。
+在统一 `docker compose` 部署里，默认网关地址是容器服务名 `yuan-gateway:8080`。
+如果 Nginx 和 Gateway 不在同一个 Docker 网络里，再按实际地址修改 `yuan-web.conf` 中的 `proxy_pass`。

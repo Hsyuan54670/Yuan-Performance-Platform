@@ -38,7 +38,7 @@ public class SystemMetricsServiceImpl implements SystemMetricsService {
 
     @Override
     public R<SystemMetricVO> getSystemMetrics() {
-        return R.success(systemMetricsCollector.collectCurrentSystemMetrics());
+        return R.success(systemMetricsCollector.collectCurrentSystemMetricsForDisplay());
     }
 
     @Override

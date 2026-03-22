@@ -6,11 +6,11 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: 172.23.80.90:8848
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
   data:
     redis:
-      host: 172.23.80.90
-      port: 6379
-      password: Lqy147258369
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:Lqy147258369}
   thymeleaf:
     cache: false
