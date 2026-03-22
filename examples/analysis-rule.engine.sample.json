@@ -1,0 +1,10 @@
+{
+  "ruleType": "ENGINE",
+  "name": "P99 持续升高",
+  "expression": "summary.p99 > 2000 && feature.highLatencySeconds >= 3",
+  "instruction": null,
+  "bottleneckType": "LATENCY",
+  "severity": "HIGH",
+  "priority": "P1",
+  "enabled": true
+}

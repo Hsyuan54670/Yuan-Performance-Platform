@@ -1,0 +1,42 @@
+[
+  {
+    "ruleType": "ENGINE",
+    "name": "P99 持续升高",
+    "expression": "summary.p99 > 2000 && feature.highLatencySeconds >= 3",
+    "instruction": null,
+    "bottleneckType": "LATENCY",
+    "severity": "HIGH",
+    "priority": "P1",
+    "enabled": true
+  },
+  {
+    "ruleType": "ENGINE",
+    "name": "错误率突增",
+    "expression": "summary.errorRate > 5 || feature.errorSpikeSeconds >= 2",
+    "instruction": null,
+    "bottleneckType": "STABILITY",
+    "severity": "HIGH",
+    "priority": "P1",
+    "enabled": true
+  },
+  {
+    "ruleType": "ENGINE",
+    "name": "CPU 压力告警",
+    "expression": "feature.highCpuSeconds >= 5 || summary.cpuPeak >= 85",
+    "instruction": null,
+    "bottleneckType": "CPU",
+    "severity": "MEDIUM",
+    "priority": "P2",
+    "enabled": true
+  },
+  {
+    "ruleType": "AI",
+    "name": "AI 根因解释增强",
+    "expression": null,
+    "instruction": "结合业务指标、资源指标和规则命中结果，总结最可能的瓶颈位置，并给出可执行排查建议。",
+    "bottleneckType": "GENERAL",
+    "severity": "MEDIUM",
+    "priority": "P2",
+    "enabled": true
+  }
+]

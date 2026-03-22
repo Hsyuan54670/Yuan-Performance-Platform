@@ -1,0 +1,17 @@
+{
+  "name": "下单主链路",
+  "steps": [
+    {
+      "name": "健康检查",
+      "method": "GET",
+      "path": "/test/mock/ping",
+      "weight": 1
+    },
+    {
+      "name": "创建订单",
+      "method": "POST",
+      "path": "/test/mock/order",
+      "weight": 3
+    }
+  ]
+}
