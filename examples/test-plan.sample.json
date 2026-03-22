@@ -1,0 +1,7 @@
+{
+  "name": "订单创建压测",
+  "targetUrl": "http://gateway:8080",
+  "concurrency": 120,
+  "duration": 300,
+  "rampType": "LINEAR"
+}

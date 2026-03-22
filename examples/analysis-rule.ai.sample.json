@@ -1,0 +1,10 @@
+{
+  "ruleType": "AI",
+  "name": "数据库瓶颈归因增强",
+  "expression": null,
+  "instruction": "如果发现高延迟伴随吞吐回落，请优先判断数据库连接池、慢 SQL、锁竞争和缓存穿透风险，并给出排查建议。",
+  "bottleneckType": "DATABASE",
+  "severity": "MEDIUM",
+  "priority": "P2",
+  "enabled": true
+}
